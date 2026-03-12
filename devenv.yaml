@@ -36,4 +36,5 @@ inputs:
 imports:
   - poly-instructions-composer
   - poly-docs-env
+  - poly-rust-env
   - poly-local-inputs

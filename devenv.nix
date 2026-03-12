@@ -1,11 +1,8 @@
 {
-  inputs,
   config,
   ...
 }:
 {
-  imports = [ (inputs.poly-rust-env + "/devenv.nix") ];
-
   rustEnv.managedCargo = {
     enable = true;
   };
