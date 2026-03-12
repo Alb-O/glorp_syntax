@@ -13,6 +13,6 @@ helix-runtime = ["default-runtime-paths"]
 
 [dependencies]
 cc.workspace = true
-liney-tree-house = { path = "../tree-house" }
+liney-syntax-tree = { path = "../syntax-tree" }
 thiserror.workspace = true
 tracing.workspace = true

@@ -1,8 +1,8 @@
 use {
-	liney_tree_house::{
+	liney_queries::{RainbowQuery, TagQuery, TextObjectQuery},
+	liney_syntax_tree::{
 		DocumentSession, EngineConfig, Language, SingleLanguageLoader, StringText, tree_sitter::Grammar,
 	},
-	liney_tree_sitter_queries::{RainbowQuery, TagQuery, TextObjectQuery},
 	std::error::Error,
 };
 

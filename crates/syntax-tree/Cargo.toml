@@ -1,13 +1,16 @@
 [package]
-name = "liney-syntax"
-description = "Syntax document state, viewport selection, and tiled highlighting on top of liney-tree-house"
+name = "liney-syntax-tree"
+description = "Tree-sitter syntax trees, injections, locals, and highlighting"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-liney-tree-house = { path = "../tree-house" }
+arc-swap.workspace = true
+regex.workspace = true
+regex-cursor.workspace = true
 ropey.workspace = true
+slab.workspace = true
 tree-sitter = { workspace = true, features = ["ropey"] }
 
 [dev-dependencies]

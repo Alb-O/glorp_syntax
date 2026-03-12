@@ -5,20 +5,20 @@ and structural query helpers.
 
 ## Crates
 
-- `crates/tree-house`
+- `crates/syntax-tree`
   Generic engine. `DocumentSession` for writes, `DocumentSnapshot` for reads.
 - `crates/language`
   Runtime and registry helpers. Explicit-path APIs are core; runtime-path, JIT,
   and Helix helpers are feature-gated.
-- `crates/syntax`
+- `crates/syntax-editor`
   Editor adapter. Viewports, document IDs, sealed windows, and highlight tiles.
-- `crates/tree-sitter-queries`
+- `crates/queries`
   Reusable query products built on engine snapshots.
 
 ## Use
 
 ```rust
-use liney_tree_house::{
+use liney_syntax_tree::{
     DocumentSession, EngineConfig, Language, SingleLanguageLoader, StringText,
     tree_sitter::Grammar,
 };
@@ -42,13 +42,13 @@ let node = snapshot.named_node_at(3, 9);
 
 ## Examples
 
-- `crates/tree-house/examples/engine_basic.rs`
+- `crates/syntax-tree/examples/engine_basic.rs`
   Parse and highlight through `DocumentSession` and `DocumentSnapshot`.
-- `crates/tree-house/examples/engine_edits.rs`
+- `crates/syntax-tree/examples/engine_edits.rs`
   Apply edits through the engine session API and inspect revision metadata.
 - `crates/language/examples/runtime_registry.rs`
   Load queries from explicit roots through the runtime registry layer.
-- `crates/syntax/examples/editor_viewport_manager.rs`
+- `crates/syntax-editor/examples/editor_viewport_manager.rs`
   Use the optional editor adapter for viewport selection and tile caching.
-- `crates/tree-sitter-queries/examples/queries_tags.rs`
+- `crates/queries/examples/queries_tags.rs`
   Run reusable tag queries against an engine snapshot.

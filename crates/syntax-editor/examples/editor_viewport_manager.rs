@@ -1,5 +1,5 @@
 use {
-	liney_syntax::{
+	liney_syntax_editor::{
 		DocumentId, Highlight, HighlightSpanQuery, HighlightTiles, Language, SealedSource, SingleLanguageLoader,
 		Syntax, SyntaxManager, SyntaxOptions, ViewportKey, tree_sitter::Grammar,
 	},

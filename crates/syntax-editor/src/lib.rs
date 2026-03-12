@@ -10,7 +10,7 @@ mod syntax;
 
 pub use {
 	highlight_cache::{HighlightKey, HighlightSpanQuery, HighlightTile, HighlightTiles, TILE_SIZE},
-	liney_tree_house::{
+	liney_syntax_tree::{
 		Language, LanguageConfig, LanguageLoader, SingleLanguageLoader, TreeCursor,
 		highlighter::{Highlight, HighlightSpan, HighlightSpans},
 		tree_sitter,

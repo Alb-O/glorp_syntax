@@ -1,4 +1,4 @@
-use {liney_tree_house::read_query as resolve_inherits, std::path::PathBuf};
+use {liney_syntax_tree::read_query as resolve_inherits, std::path::PathBuf};
 
 /// Reads a query from the default runtime/query search paths and resolves
 /// `; inherits` directives recursively.

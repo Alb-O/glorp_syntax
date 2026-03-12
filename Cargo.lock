@@ -57,23 +57,32 @@ name = "liney-language"
 version = "0.1.0"
 dependencies = [
  "cc",
- "liney-tree-house",
+ "liney-syntax-tree",
  "thiserror",
  "tracing",
 ]
 
 [[package]]
-name = "liney-syntax"
+name = "liney-queries"
 version = "0.1.0"
 dependencies = [
- "liney-tree-house",
+ "liney-syntax-tree",
+ "ropey",
+ "tree-sitter-rust",
+]
+
+[[package]]
+name = "liney-syntax-editor"
+version = "0.1.0"
+dependencies = [
+ "liney-syntax-tree",
  "ropey",
  "tree-house-bindings",
  "tree-sitter-rust",
 ]
 
 [[package]]
-name = "liney-tree-house"
+name = "liney-syntax-tree"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
@@ -82,15 +91,6 @@ dependencies = [
  "ropey",
  "slab",
  "tree-house-bindings",
- "tree-sitter-rust",
-]
-
-[[package]]
-name = "liney-tree-sitter-queries"
-version = "0.1.0"
-dependencies = [
- "liney-tree-house",
- "ropey",
  "tree-sitter-rust",
 ]
 

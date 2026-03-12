@@ -4,7 +4,7 @@ use {
 	tracing::{info, warn},
 };
 use {
-	liney_tree_house::tree_sitter::Grammar,
+	liney_syntax_tree::tree_sitter::Grammar,
 	std::path::{Path, PathBuf},
 	thiserror::Error,
 };

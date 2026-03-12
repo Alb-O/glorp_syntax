@@ -1,5 +1,5 @@
 use {
-	liney_tree_house::{
+	liney_syntax_tree::{
 		DocumentSession, EngineConfig, HighlightSpan, Language, SingleLanguageLoader, StringText,
 		highlighter::Highlight, tree_sitter::Grammar,
 	},

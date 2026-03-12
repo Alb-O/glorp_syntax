@@ -4,7 +4,7 @@ use {
 		grammar::{GrammarError, load_grammar_from_paths},
 		query::read_query_from_paths,
 	},
-	liney_tree_house::tree_sitter::Grammar,
+	liney_syntax_tree::tree_sitter::Grammar,
 	std::{collections::BTreeMap, fmt, path::PathBuf},
 };
 

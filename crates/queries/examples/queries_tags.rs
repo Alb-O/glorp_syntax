@@ -1,8 +1,8 @@
 use {
-	liney_tree_house::{
+	liney_queries::TagQuery,
+	liney_syntax_tree::{
 		DocumentSession, EngineConfig, Language, SingleLanguageLoader, StringText, tree_sitter::Grammar,
 	},
-	liney_tree_sitter_queries::TagQuery,
 	std::error::Error,
 };
 

@@ -7,7 +7,7 @@
     enable = true;
   };
 
-  rustEnv.package.manifestPath = ./crates/tree-house/Cargo.toml;
+  rustEnv.package.manifestPath = ./crates/syntax-tree/Cargo.toml;
 
   scripts = {
     show-workspace-manifest.exec = ''
