@@ -2,6 +2,7 @@ pub use tree_house::highlighter::Highlight;
 use {
 	crate::LanguageLoader,
 	liney_tree_house::{self as tree_house, highlighter::HighlightEvent},
+	ropey::RopeSlice,
 	std::ops::{Bound, RangeBounds},
 };
 
@@ -52,7 +53,10 @@ where
 		}
 	}
 
-	pub fn new(snapshot: &'a tree_house::DocumentSnapshot, loader: &'a Loader, range: impl RangeBounds<u32>) -> Self {
+	pub fn new(
+		snapshot: &'a tree_house::DocumentSnapshot, source: RopeSlice<'a>, loader: &'a Loader,
+		range: impl RangeBounds<u32>,
+	) -> Self {
 		let start = match range.start_bound() {
 			Bound::Included(&n) => n,
 			Bound::Excluded(&n) => n + 1,
@@ -64,8 +68,7 @@ where
 			Bound::Unbounded => snapshot.len_bytes(),
 		};
 
-		let inner =
-			tree_house::highlighter::Highlighter::new(snapshot.syntax(), snapshot.text_slice(), loader, start..end);
+		let inner = tree_house::highlighter::Highlighter::new(snapshot.syntax(), source, loader, start..end);
 		Self {
 			current_start: Self::doc_offset(0, inner.next_event_offset()),
 			inner,
@@ -77,8 +80,8 @@ where
 	}
 
 	pub fn new_mapped(
-		snapshot: &'a tree_house::DocumentSnapshot, loader: &'a Loader, doc_range: impl RangeBounds<u32>, base: u32,
-		end_doc: u32,
+		snapshot: &'a tree_house::DocumentSnapshot, source: RopeSlice<'a>, loader: &'a Loader,
+		doc_range: impl RangeBounds<u32>, base: u32, end_doc: u32,
 	) -> Self {
 		let start_doc = match doc_range.start_bound() {
 			Bound::Included(&n) => n,
@@ -94,12 +97,8 @@ where
 		let start_local = start_doc.saturating_sub(base);
 		let end_local = end_doc_req.saturating_sub(base).min(end_doc.saturating_sub(base));
 
-		let inner = tree_house::highlighter::Highlighter::new(
-			snapshot.syntax(),
-			snapshot.text_slice(),
-			loader,
-			start_local..end_local,
-		);
+		let inner =
+			tree_house::highlighter::Highlighter::new(snapshot.syntax(), source, loader, start_local..end_local);
 		Self {
 			current_start: Self::doc_offset(base, inner.next_event_offset()),
 			inner,

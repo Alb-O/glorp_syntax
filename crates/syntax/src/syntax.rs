@@ -1,6 +1,9 @@
 use {
 	crate::{Highlighter, Language, LanguageLoader, SealedSource, TreeCursor, tree_sitter::InputEdit},
-	liney_tree_house::{self as tree_house, DocumentSession, EngineConfig, RopeText, tree_sitter::Node},
+	liney_tree_house::{
+		self as tree_house, ByteRangeText, ChangeSet, DocumentSession, EngineConfig, RopeText, TextEdit,
+		tree_sitter::Node,
+	},
 	ropey::RopeSlice,
 	std::{ops::RangeBounds, sync::Arc, time::Duration},
 };
@@ -33,6 +36,7 @@ pub struct ViewportMetadata {
 /// Syntax tree wrapper with viewport-aware highlighting support.
 #[derive(Debug, Clone)]
 pub struct Syntax {
+	session: DocumentSession,
 	snapshot: tree_house::DocumentSnapshot,
 	opts: SyntaxOptions,
 	viewport: Option<ViewportMetadata>,
@@ -44,8 +48,10 @@ impl Syntax {
 	) -> Result<Self, tree_house::Error> {
 		let text = RopeText::from_slice(source);
 		let session = DocumentSession::new(language, &text, loader, opts.into())?;
+		let snapshot = session.snapshot();
 		Ok(Self {
-			snapshot: session.snapshot(),
+			session,
+			snapshot,
 			opts,
 			viewport: None,
 		})
@@ -57,8 +63,10 @@ impl Syntax {
 	) -> Result<Self, tree_house::Error> {
 		let text = RopeText::from_slice(sealed.slice());
 		let session = DocumentSession::new(language, &text, loader, opts.into())?;
+		let snapshot = session.snapshot();
 		Ok(Self {
-			snapshot: session.snapshot(),
+			session,
+			snapshot,
 			opts,
 			viewport: Some(ViewportMetadata {
 				base_offset,
@@ -76,9 +84,19 @@ impl Syntax {
 		}
 
 		self.opts = opts;
-		self.viewport = None;
 		let text = RopeText::from_slice(source);
-		self.snapshot = DocumentSession::new(self.root_language(), &text, loader, opts.into())?.snapshot();
+
+		if self.viewport.is_some() {
+			self.viewport = None;
+			self.session = DocumentSession::new(self.root_language(), &text, loader, opts.into())?;
+		} else {
+			let change_set = ChangeSet::new(edits.iter().map(|edit| {
+				let replacement = text.byte_text(edit.start_byte..edit.new_end_byte);
+				TextEdit::new(edit.start_byte..edit.old_end_byte, replacement)
+			}));
+			self.session.apply_edits(&change_set, loader)?;
+		}
+		self.snapshot = self.session.snapshot();
 		Ok(())
 	}
 
@@ -143,14 +161,14 @@ impl Syntax {
 		if let Some(meta) = &self.viewport {
 			Highlighter::new_mapped(
 				self.snapshot(),
+				meta.sealed_source.slice(),
 				loader,
 				range,
 				meta.base_offset,
 				meta.base_offset + meta.real_len,
 			)
 		} else {
-			let _ = source;
-			Highlighter::new(self.snapshot(), loader, range)
+			Highlighter::new(self.snapshot(), source, loader, range)
 		}
 	}
 }

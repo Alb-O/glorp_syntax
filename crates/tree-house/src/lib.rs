@@ -15,10 +15,9 @@ pub use {
 		change::{ChangeSet, Revision, SnapshotId, TextEdit, UpdateResult},
 		config::{LanguageConfig, LanguageLoader, SingleLanguageLoader, read_query},
 		injections_query::{InjectionLanguageMarker, InjectionsQuery},
-		sealed_source::SealedSource,
 		session::{DocumentSession, EngineConfig},
 		snapshot::{DocumentSnapshot, HighlightSpan, HighlightSpans, LocalScope},
-		text::{ByteRangeText, RopeText, StringText, TextSlice, TextStorage},
+		text::{ByteRangeText, DocumentText, RopeText, StringText, TextSlice, TextStorage},
 		tree_cursor::TreeCursor,
 	},
 	tree_sitter,
@@ -34,7 +33,6 @@ mod parse;
 // mod pretty_print;
 pub mod locals;
 pub mod query_iter;
-pub mod sealed_source;
 pub mod session;
 pub mod snapshot;
 pub mod text;

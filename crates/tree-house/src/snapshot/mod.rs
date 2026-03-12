@@ -1,17 +1,18 @@
 use {
 	crate::{
-		Language, LanguageLoader, Layer, Syntax, TreeCursor,
+		Language, LanguageLoader, Layer, Syntax, TREE_SITTER_MATCH_LIMIT, TreeCursor,
 		change::{Revision, SnapshotId},
 		highlighter::{Highlight, HighlightEvent},
 		locals::{Definition, Locals},
 		query_iter::{QueryIter, QueryLoader},
+		text::DocumentText,
 	},
 	ropey::{Rope, RopeSlice},
 	std::{
 		ops::{Bound, RangeBounds},
 		sync::Arc,
 	},
-	tree_sitter::{Node, Tree},
+	tree_sitter::{Capture, InactiveQueryCursor, Node, Query, RopeInput, Tree},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,7 +62,7 @@ where
 			Bound::Unbounded => snapshot.len_bytes(),
 		};
 
-		let inner = crate::highlighter::Highlighter::new(snapshot.syntax(), snapshot.text_slice(), loader, start..end);
+		let inner = crate::highlighter::Highlighter::new(snapshot.syntax(), snapshot.rope_slice(), loader, start..end);
 		Self {
 			current_start: inner.next_event_offset(),
 			inner,
@@ -190,12 +191,8 @@ impl DocumentSnapshot {
 		&self.syntax
 	}
 
-	pub fn text(&self) -> &Rope {
-		&self.text
-	}
-
-	pub fn text_slice(&self) -> RopeSlice<'_> {
-		self.text.slice(..)
+	pub fn text(&self) -> DocumentText<'_> {
+		DocumentText::new(self.rope_slice())
 	}
 
 	pub fn len_bytes(&self) -> u32 {
@@ -210,6 +207,10 @@ impl DocumentSnapshot {
 
 	pub fn tree(&self) -> &Tree {
 		self.syntax.tree()
+	}
+
+	pub fn root_node(&self) -> Node<'_> {
+		self.tree().root_node()
 	}
 
 	pub fn tree_for_byte_range(&self, start: u32, end: u32) -> &Tree {
@@ -272,10 +273,31 @@ impl DocumentSnapshot {
 		Loader: QueryLoader<'a>,
 		State: Default,
 	{
-		QueryIter::new(self.syntax(), self.text_slice(), loader, range)
+		QueryIter::new(self.syntax(), self.rope_slice(), loader, range)
 	}
 
 	pub fn layer_count(&self) -> usize {
 		self.syntax.layer_count()
+	}
+
+	pub fn matched_capture_nodes<'a>(
+		&'a self, query: &'a Query, capture: Capture, node: Node<'a>,
+	) -> Vec<Vec<Node<'a>>> {
+		let mut cursor = InactiveQueryCursor::new(0..u32::MAX, TREE_SITTER_MATCH_LIMIT).execute_query(
+			query,
+			&node,
+			RopeInput::new(self.rope_slice()),
+		);
+		let mut matched = Vec::new();
+		while let Some(mat) = cursor.next_match() {
+			let nodes: Vec<_> = mat.nodes_for_capture(capture).cloned().collect();
+			if !nodes.is_empty() {
+				matched.push(nodes);
+			}
+		}
+		matched
+	}
+	pub(crate) fn rope_slice(&self) -> RopeSlice<'_> {
+		self.text.slice(..)
 	}
 }

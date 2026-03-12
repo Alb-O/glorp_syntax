@@ -14,6 +14,17 @@ pub trait TextStorage {
 	fn to_rope(&self) -> Rope;
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct DocumentText<'a> {
+	slice: RopeSlice<'a>,
+}
+
+impl<'a> DocumentText<'a> {
+	pub(crate) fn new(slice: RopeSlice<'a>) -> Self {
+		Self { slice }
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct RopeText {
 	rope: Rope,
@@ -30,14 +41,6 @@ impl RopeText {
 			rope.append(Rope::from(chunk));
 		}
 		Self { rope }
-	}
-
-	pub fn as_rope(&self) -> &Rope {
-		&self.rope
-	}
-
-	pub fn into_rope(self) -> Rope {
-		self.rope
 	}
 }
 
@@ -63,6 +66,16 @@ impl TextSlice for RopeSlice<'_> {
 
 	fn to_owned_string(&self) -> String {
 		self.to_string()
+	}
+}
+
+impl TextSlice for DocumentText<'_> {
+	fn len_bytes(&self) -> usize {
+		self.slice.len_bytes()
+	}
+
+	fn to_owned_string(&self) -> String {
+		self.slice.to_string()
 	}
 }
 
@@ -111,6 +124,14 @@ impl ByteRangeText for Rope {
 		let end = range.end.min(self.len_bytes() as u32);
 		let start = range.start.min(end);
 		self.byte_slice(start as usize..end as usize).to_string()
+	}
+}
+
+impl ByteRangeText for DocumentText<'_> {
+	fn byte_text(&self, range: std::ops::Range<u32>) -> String {
+		let end = range.end.min(self.slice.len_bytes() as u32);
+		let start = range.start.min(end);
+		self.slice.byte_slice(start as usize..end as usize).to_string()
 	}
 }
 

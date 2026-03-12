@@ -2,7 +2,7 @@ use {
 	crate::{
 		DocumentSnapshot, Error, Language, LanguageLoader, Syntax,
 		change::{ChangeSet, Revision, SnapshotId, TextEdit, UpdateResult},
-		text::TextStorage,
+		text::{ByteRangeText, DocumentText, TextStorage},
 		tree_sitter::{InputEdit, Point},
 	},
 	ropey::Rope,
@@ -29,7 +29,7 @@ pub struct DocumentSession {
 	language: Language,
 	config: EngineConfig,
 	revision: Revision,
-	next_snapshot_id: u64,
+	snapshot_id: SnapshotId,
 	generation: u64,
 	text: Rope,
 	syntax: Syntax,
@@ -45,7 +45,7 @@ impl DocumentSession {
 			language,
 			config,
 			revision: Revision(0),
-			next_snapshot_id: 1,
+			snapshot_id: SnapshotId(1),
 			generation: 0,
 			text: rope,
 			syntax,
@@ -64,13 +64,17 @@ impl DocumentSession {
 		self.config
 	}
 
-	pub fn text(&self) -> &Rope {
-		&self.text
+	pub fn text(&self) -> DocumentText<'_> {
+		DocumentText::new(self.text.slice(..))
+	}
+
+	pub fn len_bytes(&self) -> u32 {
+		self.text.len_bytes() as u32
 	}
 
 	pub fn snapshot(&self) -> DocumentSnapshot {
 		DocumentSnapshot::new(
-			SnapshotId(self.next_snapshot_id),
+			self.snapshot_id,
 			self.revision,
 			self.generation,
 			self.text.clone(),
@@ -79,10 +83,21 @@ impl DocumentSession {
 	}
 
 	pub fn apply_edits(&mut self, edits: &ChangeSet, loader: &impl LanguageLoader) -> Result<UpdateResult, Error> {
+		let normalized = normalize_edits(&self.text, edits)?;
 		if edits.is_empty() {
 			return Ok(UpdateResult {
 				revision: self.revision,
-				snapshot_id: SnapshotId(self.next_snapshot_id),
+				snapshot_id: self.snapshot_id,
+				changed_ranges: Vec::new(),
+				timed_out: false,
+				snapshot_changed: false,
+				affected_layers: self.syntax.layer_count(),
+			});
+		}
+		if normalized.is_empty() {
+			return Ok(UpdateResult {
+				revision: self.revision,
+				snapshot_id: self.snapshot_id,
 				changed_ranges: Vec::new(),
 				timed_out: false,
 				snapshot_changed: false,
@@ -92,25 +107,35 @@ impl DocumentSession {
 
 		let mut text = self.text.clone();
 		let mut syntax = self.syntax.clone();
-		let mut changed_ranges = Vec::new();
+		let changed_ranges = coalesce_ranges(normalized.iter().map(invalidated_range).collect());
 
-		for edit in edits.iter() {
-			validate_edit(&text, edit)?;
+		for edit in &normalized {
 			let input_edit = build_input_edit(&text, edit);
 			apply_edit(&mut text, edit)?;
-			syntax.update(text.slice(..), self.config.parse_timeout, &[input_edit], loader)?;
-			changed_ranges.push(edit.range.start..(edit.range.start + edit.replacement.len() as u32));
+			if let Err(error) = syntax.update(text.slice(..), self.config.parse_timeout, &[input_edit], loader) {
+				return match error {
+					Error::Timeout => Ok(UpdateResult {
+						revision: self.revision,
+						snapshot_id: self.snapshot_id,
+						changed_ranges,
+						timed_out: true,
+						snapshot_changed: false,
+						affected_layers: self.syntax.layer_count(),
+					}),
+					other => Err(other),
+				};
+			}
 		}
 
 		self.text = text;
 		self.syntax = syntax;
 		self.revision = Revision(self.revision.0.wrapping_add(1));
-		self.next_snapshot_id = self.next_snapshot_id.wrapping_add(1);
+		self.snapshot_id = SnapshotId(self.snapshot_id.0.wrapping_add(1));
 		self.generation = self.generation.wrapping_add(1);
 
 		Ok(UpdateResult {
 			revision: self.revision,
-			snapshot_id: SnapshotId(self.next_snapshot_id),
+			snapshot_id: self.snapshot_id,
 			changed_ranges,
 			timed_out: false,
 			snapshot_changed: true,
@@ -142,6 +167,37 @@ fn validate_edit(text: &Rope, edit: &TextEdit) -> Result<(), Error> {
 	text.try_byte_to_char(edit.range.end as usize)
 		.map_err(|_| Error::InvalidRanges)?;
 	Ok(())
+}
+
+fn normalize_edits(text: &Rope, edits: &ChangeSet) -> Result<Vec<TextEdit>, Error> {
+	let mut normalized = Vec::new();
+	for edit in edits.iter() {
+		validate_edit(text, edit)?;
+		if text.byte_text(edit.range.clone()) != edit.replacement {
+			normalized.push(edit.clone());
+		}
+	}
+	Ok(normalized)
+}
+
+fn invalidated_range(edit: &TextEdit) -> std::ops::Range<u32> {
+	let new_end = edit.range.start + edit.replacement.len() as u32;
+	edit.range.start..edit.range.end.max(new_end)
+}
+
+fn coalesce_ranges(mut ranges: Vec<std::ops::Range<u32>>) -> Vec<std::ops::Range<u32>> {
+	ranges.sort_by_key(|range| range.start);
+	let mut merged: Vec<std::ops::Range<u32>> = Vec::with_capacity(ranges.len());
+	for range in ranges {
+		if let Some(prev) = merged.last_mut()
+			&& range.start <= prev.end
+		{
+			prev.end = prev.end.max(range.end);
+		} else {
+			merged.push(range);
+		}
+	}
+	merged
 }
 
 fn build_input_edit(text: &Rope, edit: &TextEdit) -> InputEdit {
@@ -239,5 +295,36 @@ mod tests {
 			.expect_err("edit should fail");
 		assert_eq!(error, Error::InvalidRanges);
 		assert_eq!(session.snapshot().byte_text(0..14), "fn alpha() {}\n");
+	}
+
+	#[test]
+	fn noop_edits_do_not_advance_revision() {
+		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
+		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
+			.expect("loader should build");
+		let mut session = rust_session("fn alpha() {}\n");
+
+		let result = session
+			.apply_edits(&ChangeSet::single(3..8, "alpha"), &loader)
+			.expect("edit should apply");
+
+		assert!(!result.snapshot_changed);
+		assert_eq!(result.revision, Revision(0));
+		assert_eq!(result.snapshot_id, SnapshotId(1));
+		assert!(result.changed_ranges.is_empty());
+	}
+
+	#[test]
+	fn update_ranges_cover_old_and_new_extents() {
+		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
+		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
+			.expect("loader should build");
+		let mut session = rust_session("fn alpha() {}\n");
+
+		let result = session
+			.apply_edits(&ChangeSet::single(3..8, "beta_gamma"), &loader)
+			.expect("edit should apply");
+
+		assert_eq!(result.changed_ranges, vec![3..13]);
 	}
 }

@@ -6,18 +6,19 @@
 mod highlight;
 mod highlight_cache;
 mod manager;
+mod sealed_source;
 mod syntax;
 
 pub use {
 	highlight::{HighlightSpan, Highlighter},
 	highlight_cache::{HighlightKey, HighlightSpanQuery, HighlightTile, HighlightTiles, TILE_SIZE},
 	liney_tree_house::{
-		Language, LanguageConfig, LanguageLoader, SealedSource, SingleLanguageLoader, TreeCursor,
-		highlighter::Highlight, tree_sitter,
+		Language, LanguageConfig, LanguageLoader, SingleLanguageLoader, TreeCursor, highlighter::Highlight, tree_sitter,
 	},
 	manager::{
 		DocumentId, InstalledSyntax, SyntaxManager, SyntaxSelection, SyntaxSlot, ViewportEntry, ViewportKey,
 		ViewportSyntax,
 	},
+	sealed_source::SealedSource,
 	syntax::{Syntax, SyntaxOptions, ViewportMetadata},
 };

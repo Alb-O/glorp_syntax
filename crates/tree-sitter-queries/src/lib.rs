@@ -80,7 +80,15 @@ impl TextObjectQuery {
 	pub fn capture_nodes_in_snapshot<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
-		self.capture_nodes(capture_name, snapshot.tree().root_node(), snapshot.text_slice())
+		let capture = self.query.get_capture(capture_name)?;
+		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
+		Some(matched.into_iter().filter_map(|nodes| {
+			if nodes.len() > 1 {
+				Some(CapturedNode::Grouped(nodes))
+			} else {
+				nodes.into_iter().map(CapturedNode::Single).next()
+			}
+		}))
 	}
 
 	pub fn capture_nodes_any<'a>(
@@ -156,7 +164,9 @@ impl TagQuery {
 	pub fn capture_nodes_in_snapshot<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
-		self.capture_nodes(capture_name, snapshot.tree().root_node(), snapshot.text_slice())
+		let capture = self.query.get_capture(capture_name)?;
+		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
+		Some(matched.into_iter().flat_map(|nodes| nodes.into_iter()))
 	}
 }
 
@@ -200,7 +210,9 @@ impl RainbowQuery {
 	pub fn capture_nodes_in_snapshot<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
-		self.capture_nodes(capture_name, snapshot.tree().root_node(), snapshot.text_slice())
+		let capture = self.query.get_capture(capture_name)?;
+		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
+		Some(matched.into_iter().flat_map(|nodes| nodes.into_iter()))
 	}
 
 	pub fn bracket_nodes<'a>(
@@ -218,13 +230,17 @@ impl RainbowQuery {
 	pub fn bracket_nodes_in_snapshot<'a>(
 		&'a self, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
-		self.bracket_nodes(snapshot.tree().root_node(), snapshot.text_slice())
+		let capture = self.bracket_capture?;
+		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
+		Some(matched.into_iter().flat_map(|nodes| nodes.into_iter()))
 	}
 
 	pub fn scope_nodes_in_snapshot<'a>(
 		&'a self, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
-		self.scope_nodes(snapshot.tree().root_node(), snapshot.text_slice())
+		let capture = self.scope_capture?;
+		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
+		Some(matched.into_iter().flat_map(|nodes| nodes.into_iter()))
 	}
 }
 
