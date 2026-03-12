@@ -1,0 +1,11 @@
+[package]
+name = "liney-syntax"
+description = "Syntax document state, viewport selection, and tiled highlighting on top of liney-tree-house"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+liney-tree-house = { path = "../tree-house" }
+ropey.workspace = true
+tree-sitter = { workspace = true, features = ["ropey"] }

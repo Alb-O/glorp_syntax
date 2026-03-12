@@ -53,6 +53,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "liney-syntax"
+version = "0.1.0"
+dependencies = [
+ "liney-tree-house",
+ "ropey",
+ "tree-house-bindings",
+]
+
+[[package]]
 name = "liney-tree-house"
 version = "0.1.0"
 dependencies = [
