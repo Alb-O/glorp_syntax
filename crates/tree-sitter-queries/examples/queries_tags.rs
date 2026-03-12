@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let snapshot = session.snapshot();
 	let query = TagQuery::new(loader.grammar(), TAG_QUERY)?;
 	let tags: Vec<_> = query
-		.capture_nodes_in_snapshot("name", &snapshot)
+		.capture_nodes("name", &snapshot)
 		.expect("name capture should exist")
 		.map(|node| SOURCE[node.start_byte() as usize..node.end_byte() as usize].to_owned())
 		.collect();

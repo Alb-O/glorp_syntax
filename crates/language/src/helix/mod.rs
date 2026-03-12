@@ -1,3 +1,5 @@
+#![cfg(feature = "helix-runtime")]
+
 use {
 	crate::bundle::load_query_bundle,
 	std::{

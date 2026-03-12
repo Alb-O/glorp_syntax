@@ -5,7 +5,11 @@ use {
 		tree_sitter::Node,
 	},
 	ropey::RopeSlice,
-	std::{ops::RangeBounds, sync::Arc, time::Duration},
+	std::{
+		ops::{Range, RangeBounds},
+		sync::Arc,
+		time::Duration,
+	},
 };
 
 /// Default parse timeout for syntax tree construction and updates.
@@ -86,9 +90,23 @@ impl Syntax {
 		self.opts = opts;
 		let text = RopeText::from_slice(source);
 
-		if self.viewport.is_some() {
-			self.viewport = None;
-			self.session = DocumentSession::new(self.root_language(), &text, loader, opts.into())?;
+		if let Some(meta) = &self.viewport {
+			let coverage = remap_viewport_range(meta.base_offset..meta.base_offset + meta.real_len, edits);
+			let sealed = Arc::new(SealedSource::from_byte_range_with_newline_padding(
+				source,
+				coverage.clone(),
+			));
+			self.session = DocumentSession::new(
+				self.root_language(),
+				&RopeText::from_slice(sealed.slice()),
+				loader,
+				opts.into(),
+			)?;
+			self.viewport = Some(ViewportMetadata {
+				base_offset: coverage.start,
+				real_len: sealed.real_len_bytes,
+				sealed_source: sealed,
+			});
 		} else {
 			let change_set = ChangeSet::new(edits.iter().map(|edit| {
 				let replacement = text.byte_text(edit.start_byte..edit.new_end_byte);
@@ -173,10 +191,77 @@ impl Syntax {
 	}
 }
 
+fn remap_viewport_range(mut range: Range<u32>, edits: &[InputEdit]) -> Range<u32> {
+	for edit in edits {
+		range.start = remap_offset(range.start, edit, false);
+		range.end = remap_offset(range.end, edit, true).max(range.start);
+	}
+	range
+}
+
+fn remap_offset(offset: u32, edit: &InputEdit, map_to_new_end: bool) -> u32 {
+	if offset < edit.start_byte {
+		return offset;
+	}
+	if offset > edit.old_end_byte {
+		return offset.saturating_add_signed(edit.new_end_byte as i32 - edit.old_end_byte as i32);
+	}
+	if map_to_new_end {
+		edit.new_end_byte
+	} else {
+		edit.start_byte
+	}
+}
+
 impl From<SyntaxOptions> for EngineConfig {
 	fn from(value: SyntaxOptions) -> Self {
 		Self {
 			parse_timeout: value.parse_timeout,
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use {
+		super::*,
+		crate::{SingleLanguageLoader, tree_sitter::Grammar},
+		ropey::Rope,
+	};
+
+	#[test]
+	fn partial_update_stays_partial() {
+		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
+		let loader =
+			SingleLanguageLoader::from_queries(Language::new(0), grammar, "", "", "").expect("loader should build");
+		let mut rope = Rope::from_str("fn alpha() {\n    alpha();\n}\n");
+		let start = 0u32;
+		let end = rope.len_bytes() as u32 - 2;
+		let sealed = Arc::new(SealedSource::from_byte_range_with_newline_padding(
+			rope.slice(..),
+			start..end,
+		));
+		let mut syntax = Syntax::new_viewport(sealed, loader.language(), &loader, SyntaxOptions::default(), start)
+			.expect("viewport syntax should parse");
+
+		let replacement = "beta";
+		let old_end = 8u32;
+		rope.remove(3..8);
+		rope.insert(3, replacement);
+		let edit = InputEdit {
+			start_byte: 3,
+			old_end_byte: old_end,
+			new_end_byte: 3 + replacement.len() as u32,
+			start_point: tree_house::tree_sitter::Point { row: 0, col: 3 },
+			old_end_point: tree_house::tree_sitter::Point { row: 0, col: 8 },
+			new_end_point: tree_house::tree_sitter::Point { row: 0, col: 7 },
+		};
+
+		syntax
+			.update(rope.slice(..), &[edit], &loader, SyntaxOptions::default())
+			.expect("viewport update should succeed");
+
+		assert!(syntax.is_partial());
+		assert_eq!(syntax.snapshot().byte_text(0..12), "fn beta() {\n");
 	}
 }

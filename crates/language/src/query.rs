@@ -1,9 +1,10 @@
-use {crate::runtime_paths, liney_tree_house::read_query as resolve_inherits, std::path::PathBuf};
+use {liney_tree_house::read_query as resolve_inherits, std::path::PathBuf};
 
 /// Reads a query from the default runtime/query search paths and resolves
 /// `; inherits` directives recursively.
+#[cfg(feature = "default-runtime-paths")]
 pub fn read_query(lang: &str, filename: &str) -> String {
-	let roots = runtime_paths::query_search_paths();
+	let roots = crate::runtime_paths::query_search_paths();
 	read_query_from_paths(lang, filename, &roots)
 }
 

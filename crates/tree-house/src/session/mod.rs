@@ -6,7 +6,7 @@ use {
 		tree_sitter::{InputEdit, Point},
 	},
 	ropey::Rope,
-	std::time::Duration,
+	std::{sync::Arc, time::Duration},
 };
 
 const DEFAULT_PARSE_TIMEOUT: Duration = Duration::from_millis(500);
@@ -31,8 +31,8 @@ pub struct DocumentSession {
 	revision: Revision,
 	snapshot_id: SnapshotId,
 	generation: u64,
-	text: Rope,
-	syntax: Syntax,
+	text: Arc<Rope>,
+	syntax: Arc<Syntax>,
 }
 
 impl DocumentSession {
@@ -47,8 +47,8 @@ impl DocumentSession {
 			revision: Revision(0),
 			snapshot_id: SnapshotId(1),
 			generation: 0,
-			text: rope,
-			syntax,
+			text: Arc::new(rope),
+			syntax: Arc::new(syntax),
 		})
 	}
 
@@ -65,7 +65,7 @@ impl DocumentSession {
 	}
 
 	pub fn text(&self) -> DocumentText<'_> {
-		DocumentText::new(self.text.slice(..))
+		DocumentText::new(self.text.as_ref().slice(..))
 	}
 
 	pub fn len_bytes(&self) -> u32 {
@@ -77,13 +77,13 @@ impl DocumentSession {
 			self.snapshot_id,
 			self.revision,
 			self.generation,
-			self.text.clone(),
-			self.syntax.clone(),
+			Arc::clone(&self.text),
+			Arc::clone(&self.syntax),
 		)
 	}
 
 	pub fn apply_edits(&mut self, edits: &ChangeSet, loader: &impl LanguageLoader) -> Result<UpdateResult, Error> {
-		let normalized = normalize_edits(&self.text, edits)?;
+		let normalized = normalize_edits(self.text.as_ref(), edits)?;
 		if edits.is_empty() {
 			return Ok(UpdateResult {
 				revision: self.revision,
@@ -105,8 +105,8 @@ impl DocumentSession {
 			});
 		}
 
-		let mut text = self.text.clone();
-		let mut syntax = self.syntax.clone();
+		let mut text = self.text.as_ref().clone();
+		let mut syntax = self.syntax.as_ref().clone();
 		let changed_ranges = coalesce_ranges(normalized.iter().map(invalidated_range).collect());
 
 		for edit in &normalized {
@@ -127,8 +127,8 @@ impl DocumentSession {
 			}
 		}
 
-		self.text = text;
-		self.syntax = syntax;
+		self.text = Arc::new(text);
+		self.syntax = Arc::new(syntax);
 		self.revision = Revision(self.revision.0.wrapping_add(1));
 		self.snapshot_id = SnapshotId(self.snapshot_id.0.wrapping_add(1));
 		self.generation = self.generation.wrapping_add(1);
@@ -252,6 +252,7 @@ mod tests {
 	use {
 		super::*,
 		crate::{SingleLanguageLoader, StringText, tree_sitter::Grammar},
+		std::fmt::Write,
 	};
 
 	fn rust_session(src: &str) -> DocumentSession {
@@ -326,5 +327,35 @@ mod tests {
 			.expect("edit should apply");
 
 		assert_eq!(result.changed_ranges, vec![3..13]);
+	}
+
+	#[test]
+	fn timeout_returns_without_mutating_session() {
+		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
+		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
+			.expect("loader should build");
+		let mut source = String::new();
+		for idx in 0..20_000 {
+			writeln!(&mut source, "fn value_{idx}() -> i32 {{ {idx} }}").expect("source should build");
+		}
+		let mut session = DocumentSession::new(
+			loader.language(),
+			&StringText::new(source.clone()),
+			&loader,
+			EngineConfig::default(),
+		)
+		.expect("session should parse");
+		session.config.parse_timeout = Duration::from_micros(1);
+		let before = session.snapshot();
+
+		let result = session
+			.apply_edits(&ChangeSet::single(3..8, "updated"), &loader)
+			.expect("timeout should be reported as an update result");
+
+		assert!(result.timed_out);
+		assert!(!result.snapshot_changed);
+		assert_eq!(result.revision, before.revision());
+		assert_eq!(result.snapshot_id, before.id());
+		assert_eq!(session.snapshot().byte_text(0..15), before.byte_text(0..15));
 	}
 }

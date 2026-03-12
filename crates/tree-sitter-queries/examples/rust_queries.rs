@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 	let text_objects = TextObjectQuery::new(loader.grammar(), TEXT_OBJECT_QUERY)?;
 	let functions: Vec<_> = text_objects
-		.capture_nodes_in_snapshot("function.outer", &snapshot)
+		.capture_nodes("function.outer", &snapshot)
 		.expect("function.outer capture should exist")
 		.map(|node| {
 			let range = node.byte_range();
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 	assert!(functions.iter().any(|line| line == "fn main() {"));
 
 	let call_arguments: Vec<_> = text_objects
-		.capture_nodes_in_snapshot("call.arguments", &snapshot)
+		.capture_nodes("call.arguments", &snapshot)
 		.expect("call.arguments capture should exist")
 		.map(|node| {
 			let range = node.byte_range();
@@ -104,7 +104,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 	let tag_query = TagQuery::new(loader.grammar(), TAG_QUERY)?;
 	let tagged_functions: Vec<_> = tag_query
-		.capture_nodes_in_snapshot("name", &snapshot)
+		.capture_nodes("name", &snapshot)
 		.expect("name capture should exist")
 		.map(|node| {
 			let range = node.byte_range();
@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 	let rainbow_query = RainbowQuery::new(loader.grammar(), RAINBOW_QUERY)?;
 	let bracket_count = rainbow_query
-		.bracket_nodes_in_snapshot(&snapshot)
+		.bracket_nodes(&snapshot)
 		.expect("rainbow.bracket capture should exist")
 		.count();
 	assert!(bracket_count >= 10);

@@ -165,13 +165,15 @@ pub struct DocumentSnapshot {
 }
 
 impl DocumentSnapshot {
-	pub(crate) fn new(id: SnapshotId, revision: Revision, generation: u64, text: Rope, syntax: Syntax) -> Self {
+	pub(crate) fn new(
+		id: SnapshotId, revision: Revision, generation: u64, text: Arc<Rope>, syntax: Arc<Syntax>,
+	) -> Self {
 		Self {
 			id,
 			revision,
 			generation,
-			text: Arc::new(text),
-			syntax: Arc::new(syntax),
+			text,
+			syntax,
 		}
 	}
 

@@ -5,6 +5,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["default-runtime-paths", "jit-grammars", "helix-runtime"]
+default-runtime-paths = []
+jit-grammars = ["default-runtime-paths"]
+helix-runtime = ["default-runtime-paths"]
+
 [dependencies]
 cc.workspace = true
 liney-tree-house = { path = "../tree-house" }

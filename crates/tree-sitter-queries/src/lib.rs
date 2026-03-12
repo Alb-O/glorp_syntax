@@ -4,16 +4,12 @@
 //! Structural tree-sitter query helpers built on top of `liney_tree_house`.
 
 pub use liney_tree_house::read_query;
-use {
-	liney_tree_house::{
-		DocumentSnapshot, TREE_SITTER_MATCH_LIMIT,
-		tree_sitter::{
-			Capture, Grammar, InactiveQueryCursor, Node, Query, RopeInput,
-			query::{InvalidPredicateError, UserPredicate},
-		},
+use liney_tree_house::{
+	DocumentSnapshot,
+	tree_sitter::{
+		Grammar, Node, Query,
+		query::{InvalidPredicateError, UserPredicate},
 	},
-	ropey::RopeSlice,
-	std::iter,
 };
 
 /// Query for computing indentation.
@@ -63,21 +59,6 @@ impl TextObjectQuery {
 	}
 
 	pub fn capture_nodes<'a>(
-		&'a self, capture_name: &str, node: Node<'a>, source: RopeSlice<'a>,
-	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
-		let capture = self.query.get_capture(capture_name)?;
-		Some(
-			matched_capture_nodes(&self.query, capture, node, source).filter_map(|nodes| {
-				if nodes.len() > 1 {
-					Some(CapturedNode::Grouped(nodes))
-				} else {
-					nodes.into_iter().map(CapturedNode::Single).next()
-				}
-			}),
-		)
-	}
-
-	pub fn capture_nodes_in_snapshot<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
 		let capture = self.query.get_capture(capture_name)?;
@@ -92,18 +73,17 @@ impl TextObjectQuery {
 	}
 
 	pub fn capture_nodes_any<'a>(
-		&'a self, capture_names: &[&str], node: Node<'a>, source: RopeSlice<'a>,
+		&'a self, capture_names: &[&str], snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
 		let capture = capture_names.iter().find_map(|name| self.query.get_capture(name))?;
-		Some(
-			matched_capture_nodes(&self.query, capture, node, source).filter_map(|nodes| {
-				if nodes.len() > 1 {
-					Some(CapturedNode::Grouped(nodes))
-				} else {
-					nodes.into_iter().map(CapturedNode::Single).next()
-				}
-			}),
-		)
+		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
+		Some(matched.into_iter().filter_map(|nodes| {
+			if nodes.len() > 1 {
+				Some(CapturedNode::Grouped(nodes))
+			} else {
+				nodes.into_iter().map(CapturedNode::Single).next()
+			}
+		}))
 	}
 }
 
@@ -155,13 +135,6 @@ impl TagQuery {
 	}
 
 	pub fn capture_nodes<'a>(
-		&'a self, capture_name: &str, node: Node<'a>, source: RopeSlice<'a>,
-	) -> Option<impl Iterator<Item = Node<'a>>> {
-		let capture = self.query.get_capture(capture_name)?;
-		Some(capture_nodes(&self.query, capture, node, source))
-	}
-
-	pub fn capture_nodes_in_snapshot<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.query.get_capture(capture_name)?;
@@ -201,13 +174,6 @@ impl RainbowQuery {
 	}
 
 	pub fn capture_nodes<'a>(
-		&'a self, capture_name: &str, node: Node<'a>, source: RopeSlice<'a>,
-	) -> Option<impl Iterator<Item = Node<'a>>> {
-		let capture = self.query.get_capture(capture_name)?;
-		Some(capture_nodes(&self.query, capture, node, source))
-	}
-
-	pub fn capture_nodes_in_snapshot<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.query.get_capture(capture_name)?;
@@ -215,70 +181,17 @@ impl RainbowQuery {
 		Some(matched.into_iter().flat_map(|nodes| nodes.into_iter()))
 	}
 
-	pub fn bracket_nodes<'a>(
-		&'a self, node: Node<'a>, source: RopeSlice<'a>,
-	) -> Option<impl Iterator<Item = Node<'a>>> {
-		let capture = self.bracket_capture?;
-		Some(capture_nodes(&self.query, capture, node, source))
-	}
-
-	pub fn scope_nodes<'a>(&'a self, node: Node<'a>, source: RopeSlice<'a>) -> Option<impl Iterator<Item = Node<'a>>> {
-		let capture = self.scope_capture?;
-		Some(capture_nodes(&self.query, capture, node, source))
-	}
-
-	pub fn bracket_nodes_in_snapshot<'a>(
-		&'a self, snapshot: &'a DocumentSnapshot,
-	) -> Option<impl Iterator<Item = Node<'a>>> {
+	pub fn bracket_nodes<'a>(&'a self, snapshot: &'a DocumentSnapshot) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.bracket_capture?;
 		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
 		Some(matched.into_iter().flat_map(|nodes| nodes.into_iter()))
 	}
 
-	pub fn scope_nodes_in_snapshot<'a>(
-		&'a self, snapshot: &'a DocumentSnapshot,
-	) -> Option<impl Iterator<Item = Node<'a>>> {
+	pub fn scope_nodes<'a>(&'a self, snapshot: &'a DocumentSnapshot) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.scope_capture?;
 		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
 		Some(matched.into_iter().flat_map(|nodes| nodes.into_iter()))
 	}
-}
-
-fn matched_capture_nodes<'a>(
-	query: &'a Query, capture: Capture, node: Node<'a>, source: RopeSlice<'a>,
-) -> impl Iterator<Item = Vec<Node<'a>>> {
-	let mut cursor = InactiveQueryCursor::new(0..u32::MAX, TREE_SITTER_MATCH_LIMIT).execute_query(
-		query,
-		&node,
-		RopeInput::new(source),
-	);
-
-	iter::from_fn(move || {
-		loop {
-			let mat = cursor.next_match()?;
-			let nodes: Vec<_> = mat.nodes_for_capture(capture).cloned().collect();
-			if !nodes.is_empty() {
-				return Some(nodes);
-			}
-		}
-	})
-}
-
-fn capture_nodes<'a>(
-	query: &'a Query, capture: Capture, node: Node<'a>, source: RopeSlice<'a>,
-) -> impl Iterator<Item = Node<'a>> {
-	let mut matches = matched_capture_nodes(query, capture, node, source);
-	let mut pending = Vec::new();
-
-	iter::from_fn(move || {
-		loop {
-			if let Some(node) = pending.pop() {
-				return Some(node);
-			}
-			pending = matches.next()?;
-			pending.reverse();
-		}
-	})
 }
 
 #[cfg(test)]
@@ -336,7 +249,7 @@ fn beta(arg: i32) -> i32 {
 		let (snapshot, loader) = root()?;
 		let query = TagQuery::new(loader.grammar(), TAG_QUERY)?;
 		let names: Vec<_> = query
-			.capture_nodes_in_snapshot("name", &snapshot)
+			.capture_nodes("name", &snapshot)
 			.expect("name capture should exist")
 			.map(|node| SOURCE[node.start_byte() as usize..node.end_byte() as usize].to_owned())
 			.collect();
@@ -350,11 +263,11 @@ fn beta(arg: i32) -> i32 {
 		let (snapshot, loader) = root()?;
 		let query = RainbowQuery::new(loader.grammar(), RAINBOW_QUERY)?;
 		let brackets = query
-			.bracket_nodes_in_snapshot(&snapshot)
+			.bracket_nodes(&snapshot)
 			.expect("bracket capture should exist")
 			.count();
 		let scopes = query
-			.scope_nodes_in_snapshot(&snapshot)
+			.scope_nodes(&snapshot)
 			.expect("scope capture should exist")
 			.count();
 

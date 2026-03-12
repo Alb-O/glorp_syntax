@@ -6,26 +6,39 @@
 //! - read query files with `; inherits` resolution
 //! - pin and fetch Helix runtime queries for build-time embedding
 
+#[cfg(feature = "jit-grammars")]
 pub mod build;
 pub mod bundle;
 pub mod grammar;
+#[cfg(feature = "helix-runtime")]
 pub mod helix;
 pub mod query;
 pub mod registry;
+#[cfg(feature = "default-runtime-paths")]
 pub mod runtime_paths;
 
+#[cfg(feature = "helix-runtime")]
+pub use helix::{HelixQueryError, HelixRuntimeLock, ensure_helix_queries_checkout, merge_language_queries};
+#[cfg(feature = "jit-grammars")]
 pub use {
 	build::{
 		BuildStatus, FetchStatus, GrammarBuildError, GrammarConfig, GrammarSource, build_grammar, fetch_grammar,
 		get_grammar_src_dir, grammar_lib_dir, grammar_sources_dir, library_extension,
 	},
+	grammar::{load_or_build_grammar, load_or_build_grammar_from_paths},
+};
+pub use {
 	bundle::{QueryBundle, load_query_bundle},
 	grammar::{
-		GrammarError, GrammarSource as LoadedGrammarSource, load_grammar, load_grammar_from_path,
-		load_grammar_from_paths, load_or_build_grammar, load_or_build_grammar_from_paths, locate_grammar_library,
+		GrammarError, GrammarSource as LoadedGrammarSource, load_grammar_from_path, load_grammar_from_paths,
+		locate_grammar_library,
 	},
-	helix::{HelixQueryError, HelixRuntimeLock, ensure_helix_queries_checkout, merge_language_queries},
-	query::{read_query, read_query_from_paths},
+	query::read_query_from_paths,
 	registry::{GrammarLocator, LanguageId, LanguageRegistry, LanguageSpec, QueryLocator},
+};
+#[cfg(feature = "default-runtime-paths")]
+pub use {
+	grammar::load_grammar,
+	query::read_query,
 	runtime_paths::{cache_dir, grammar_search_paths, query_search_paths, runtime_dir},
 };

@@ -1,12 +1,12 @@
+#[cfg(feature = "jit-grammars")]
 use {
-	crate::{
-		build::{BuildStatus, FetchStatus, GrammarBuildError, GrammarConfig, build_grammar, fetch_grammar},
-		runtime_paths,
-	},
+	crate::build::{BuildStatus, FetchStatus, GrammarBuildError, GrammarConfig, build_grammar, fetch_grammar},
+	tracing::{info, warn},
+};
+use {
 	liney_tree_house::tree_sitter::Grammar,
 	std::path::{Path, PathBuf},
 	thiserror::Error,
-	tracing::{info, warn},
 };
 
 #[derive(Debug, Clone)]
@@ -29,6 +29,7 @@ pub enum GrammarError {
 	Io(#[from] std::io::Error),
 }
 
+#[cfg(feature = "jit-grammars")]
 impl From<GrammarBuildError> for GrammarError {
 	fn from(value: GrammarBuildError) -> Self {
 		Self::BuildFailed(value.to_string())
@@ -56,10 +57,12 @@ pub fn load_grammar_from_paths(name: &str, search_paths: &[PathBuf]) -> Result<G
 	load_grammar_from_path(&path, name)
 }
 
+#[cfg(feature = "default-runtime-paths")]
 pub fn load_grammar(name: &str) -> Result<Grammar, GrammarError> {
-	load_grammar_from_paths(name, &runtime_paths::grammar_search_paths())
+	load_grammar_from_paths(name, &crate::runtime_paths::grammar_search_paths())
 }
 
+#[cfg(feature = "jit-grammars")]
 pub fn load_or_build_grammar_from_paths(
 	config: &GrammarConfig, search_paths: &[PathBuf],
 ) -> Result<Grammar, GrammarError> {
@@ -96,8 +99,9 @@ pub fn load_or_build_grammar_from_paths(
 	load_grammar_from_paths(&config.grammar_id, search_paths)
 }
 
+#[cfg(all(feature = "jit-grammars", feature = "default-runtime-paths"))]
 pub fn load_or_build_grammar(config: &GrammarConfig) -> Result<Grammar, GrammarError> {
-	load_or_build_grammar_from_paths(config, &runtime_paths::grammar_search_paths())
+	load_or_build_grammar_from_paths(config, &crate::runtime_paths::grammar_search_paths())
 }
 
 fn grammar_library_name(name: &str) -> String {
