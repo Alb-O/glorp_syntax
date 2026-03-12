@@ -1,0 +1,14 @@
+[package]
+name = "liney-tree-house"
+description = "Tree-sitter syntax trees, injections, locals, and highlighting"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+arc-swap.workspace = true
+regex.workspace = true
+regex-cursor.workspace = true
+ropey.workspace = true
+slab.workspace = true
+tree-sitter = { workspace = true, features = ["ropey"] }

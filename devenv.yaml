@@ -1,0 +1,39 @@
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  rust-overlay:
+    url: github:oxalica/rust-overlay
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  treefmt-nix:
+    url: github:numtide/treefmt-nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  crate2nix:
+    url: github:nix-community/crate2nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  poly-instructions-composer:
+    url: github:Alb-O/poly-instructions-composer
+    flake: false
+  poly-rust-env:
+    url: github:Alb-O/poly-rust-env
+    flake: false
+  poly-docs-env:
+    url: github:Alb-O/poly-docs-env
+    flake: false
+  poly-local-inputs:
+    url: github:Alb-O/poly-local-inputs
+    flake: false
+imports:
+  - poly-instructions-composer
+  - poly-docs-env
+  - poly-local-inputs
