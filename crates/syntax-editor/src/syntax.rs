@@ -47,18 +47,22 @@ pub struct Syntax {
 }
 
 impl Syntax {
+	fn from_session(session: DocumentSession, opts: SyntaxOptions, viewport: Option<ViewportMetadata>) -> Self {
+		let snapshot = session.snapshot();
+		Self {
+			session,
+			snapshot,
+			opts,
+			viewport,
+		}
+	}
+
 	pub fn new(
 		source: RopeSlice<'_>, language: Language, loader: &impl LanguageLoader, opts: SyntaxOptions,
 	) -> Result<Self, tree_house::Error> {
 		let text = RopeText::from_slice(source);
 		let session = DocumentSession::new(language, &text, loader, opts.into())?;
-		let snapshot = session.snapshot();
-		Ok(Self {
-			session,
-			snapshot,
-			opts,
-			viewport: None,
-		})
+		Ok(Self::from_session(session, opts, None))
 	}
 
 	pub fn new_viewport(
@@ -67,17 +71,15 @@ impl Syntax {
 	) -> Result<Self, tree_house::Error> {
 		let text = RopeText::from_slice(sealed.slice());
 		let session = DocumentSession::new(language, &text, loader, opts.into())?;
-		let snapshot = session.snapshot();
-		Ok(Self {
+		Ok(Self::from_session(
 			session,
-			snapshot,
 			opts,
-			viewport: Some(ViewportMetadata {
+			Some(ViewportMetadata {
 				base_offset,
 				real_len: sealed.real_len_bytes,
 				sealed_source: sealed,
 			}),
-		})
+		))
 	}
 
 	pub fn update(
@@ -174,8 +176,7 @@ impl Syntax {
 		&'a self, loader: &'a Loader, range: impl RangeBounds<u32>,
 	) -> HighlightSpans<'a, Loader>
 	where
-		Loader: LanguageLoader,
-	{
+		Loader: LanguageLoader, {
 		if let Some(meta) = &self.viewport {
 			HighlightSpans::new_mapped(
 				self.snapshot.syntax(),

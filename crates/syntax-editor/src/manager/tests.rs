@@ -14,9 +14,9 @@ fn rust_syntax(src: &str) -> Syntax {
 
 #[test]
 fn candidate_score_prefers_exact_full_then_enriched() {
-	let exact_full = candidate_score(4, true, false, 4);
-	let exact_viewport_enriched = candidate_score(4, false, true, 4);
-	let stale_full = candidate_score(3, true, false, 4);
+	let exact_full = CandidateScore::new(4, true, false, 4);
+	let exact_viewport_enriched = CandidateScore::new(4, false, true, 4);
+	let stale_full = CandidateScore::new(3, true, false, 4);
 
 	assert!(exact_full > exact_viewport_enriched);
 	assert!(exact_viewport_enriched > stale_full);

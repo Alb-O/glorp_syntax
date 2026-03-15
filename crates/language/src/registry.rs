@@ -104,7 +104,7 @@ impl QueryLocator {
 	}
 
 	pub fn bundle(&self, language: &LanguageId) -> std::io::Result<QueryBundle> {
-		load_query_bundle(language.clone(), &self.roots)
+		load_query_bundle(language.as_str(), &self.roots)
 	}
 }
 
@@ -150,7 +150,7 @@ impl LanguageRegistry {
 		if spec.query_roots.is_empty() {
 			self.default_query_locator.bundle(id)
 		} else {
-			load_query_bundle(id.clone(), &spec.query_roots)
+			load_query_bundle(id.as_str(), &spec.query_roots)
 		}
 	}
 }

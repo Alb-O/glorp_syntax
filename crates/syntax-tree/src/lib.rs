@@ -121,7 +121,8 @@ impl Syntax {
 			layers,
 		};
 
-		syntax.update(source, timeout, &[], loader).map(|_| syntax)
+		syntax.update(source, timeout, &[], loader)?;
+		Ok(syntax)
 	}
 
 	pub fn layer(&self, layer: Layer) -> &LayerData {

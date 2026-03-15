@@ -48,7 +48,7 @@ impl QueryBundle {
 
 pub fn load_query_bundle(language: impl Into<LanguageId>, roots: &[PathBuf]) -> std::io::Result<QueryBundle> {
 	let language = language.into();
-	let mut bundle = QueryBundle::new(language.clone());
+	let mut bundle = QueryBundle::new(language.as_str());
 
 	for root in roots {
 		let lang_dir = root.join(language.as_str());

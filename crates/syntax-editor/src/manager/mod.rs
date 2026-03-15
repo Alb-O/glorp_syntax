@@ -36,6 +36,23 @@ pub struct ViewportEntry {
 	pub stage_b: Option<ViewportSyntax>,
 }
 
+impl ViewportEntry {
+	fn stages(&self) -> impl Iterator<Item = (&ViewportSyntax, bool)> + '_ {
+		self.stage_b
+			.iter()
+			.map(|tree| (tree, true))
+			.chain(self.stage_a.iter().map(|tree| (tree, false)))
+	}
+
+	fn has_any(&self) -> bool {
+		self.stage_a.is_some() || self.stage_b.is_some()
+	}
+
+	fn best_doc_version(&self) -> Option<u64> {
+		self.stages().map(|(tree, _)| tree.doc_version).max()
+	}
+}
+
 #[derive(Debug, Clone)]
 struct FullTreeMemoryEntry {
 	content: Rope,
@@ -96,20 +113,11 @@ impl ViewportCache {
 	}
 
 	pub fn has_any(&self) -> bool {
-		self.map
-			.values()
-			.any(|entry| entry.stage_a.is_some() || entry.stage_b.is_some())
+		self.map.values().any(ViewportEntry::has_any)
 	}
 
 	pub fn best_doc_version(&self) -> Option<u64> {
-		self.map
-			.values()
-			.filter_map(|entry| {
-				let a = entry.stage_a.as_ref().map(|tree| tree.doc_version);
-				let b = entry.stage_b.as_ref().map(|tree| tree.doc_version);
-				a.max(b)
-			})
-			.max()
+		self.map.values().filter_map(ViewportEntry::best_doc_version).max()
 	}
 }
 
@@ -275,10 +283,7 @@ impl SyntaxManager {
 			let Some(entry) = slot.viewport_cache.map.get(&key) else {
 				continue;
 			};
-			if let Some(tree) = entry.stage_b.as_ref() {
-				return Some(&tree.syntax);
-			}
-			if let Some(tree) = entry.stage_a.as_ref() {
+			if let Some((tree, _)) = entry.stages().next() {
 				return Some(&tree.syntax);
 			}
 		}
@@ -312,7 +317,7 @@ impl SyntaxManager {
 			let Some(entry) = slot.viewport_cache.map.get(&key) else {
 				continue;
 			};
-			if let Some(tree) = entry.stage_b.as_ref() {
+			for (tree, enriched) in entry.stages() {
 				consider_candidate(
 					&mut best_overlapping,
 					&mut best_any,
@@ -322,22 +327,7 @@ impl SyntaxManager {
 						tree_doc_version: tree.doc_version,
 						coverage: Some(tree.coverage.clone()),
 					},
-					true,
-					doc_version,
-					&viewport,
-				);
-			}
-			if let Some(tree) = entry.stage_a.as_ref() {
-				consider_candidate(
-					&mut best_overlapping,
-					&mut best_any,
-					SyntaxSelection {
-						syntax: &tree.syntax,
-						tree_id: tree.tree_id,
-						tree_doc_version: tree.doc_version,
-						coverage: Some(tree.coverage.clone()),
-					},
-					false,
+					enriched,
 					doc_version,
 					&viewport,
 				);
@@ -435,15 +425,11 @@ impl CandidateScore {
 
 type ScoredSelection<'a> = (SyntaxSelection<'a>, CandidateScore);
 
-fn candidate_score(tree_doc_version: u64, is_full: bool, enriched: bool, doc_version: u64) -> CandidateScore {
-	CandidateScore::new(tree_doc_version, is_full, enriched, doc_version)
-}
-
 fn consider_candidate<'a>(
 	best_overlapping: &mut Option<ScoredSelection<'a>>, best_any: &mut Option<ScoredSelection<'a>>,
 	selection: SyntaxSelection<'a>, enriched: bool, doc_version: u64, viewport: &Range<u32>,
 ) {
-	let score = candidate_score(
+	let score = CandidateScore::new(
 		selection.tree_doc_version,
 		selection.coverage.is_none(),
 		enriched,

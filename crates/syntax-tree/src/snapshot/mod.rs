@@ -122,8 +122,7 @@ impl DocumentSnapshot {
 		&'a self, loader: &'a Loader, range: impl RangeBounds<u32>,
 	) -> HighlightSpans<'a, Loader>
 	where
-		Loader: LanguageLoader,
-	{
+		Loader: LanguageLoader, {
 		HighlightSpans::new(self.syntax(), self.rope_slice(), loader, range)
 	}
 
@@ -141,8 +140,7 @@ impl DocumentSnapshot {
 	) -> QueryIter<'a, 'a, Loader, State>
 	where
 		Loader: QueryLoader<'a>,
-		State: Default,
-	{
+		State: Default, {
 		QueryIter::new(self.syntax(), self.rope_slice(), loader, range)
 	}
 

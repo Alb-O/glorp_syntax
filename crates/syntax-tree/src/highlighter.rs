@@ -483,8 +483,7 @@ impl HighlightSpan {
 /// Iterator wrapper that emits contiguous highlight spans.
 pub struct HighlightSpans<'a, Loader>
 where
-	Loader: LanguageLoader,
-{
+	Loader: LanguageLoader, {
 	inner: HighlightEvents<'a, 'a, Loader>,
 	current_start: u32,
 	current_highlight: Option<Highlight>,

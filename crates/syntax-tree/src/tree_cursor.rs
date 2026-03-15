@@ -47,8 +47,7 @@ impl<'tree> TreeCursor<'tree> {
 
 	pub fn goto_parent_with<P>(&mut self, predicate: P) -> bool
 	where
-		P: Fn(&Node) -> bool,
-	{
+		P: Fn(&Node) -> bool, {
 		while self.goto_parent() {
 			if predicate(&self.node()) {
 				return true;
