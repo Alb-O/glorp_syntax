@@ -60,3 +60,41 @@ fn lru_eviction_reuses_slots() {
 	assert!(cache.index.get(&DocumentId(1)).is_some_and(|doc| !doc.contains_key(&1)));
 	assert!(cache.index.get(&DocumentId(1)).is_some_and(|doc| doc.contains_key(&2)));
 }
+
+#[test]
+fn invalidate_document_reclaims_dead_tile_slots() {
+	let mut cache = HighlightTiles::<u8>::with_capacity(3);
+	for tile_idx in 0..2 {
+		cache.insert_tile(
+			DocumentId(1),
+			tile_idx,
+			HighlightTile {
+				key: HighlightKey {
+					syntax_version: 1,
+					theme_epoch: 0,
+					tile_idx,
+				},
+				spans: Vec::new(),
+			},
+		);
+	}
+	cache.insert_tile(
+		DocumentId(2),
+		0,
+		HighlightTile {
+			key: HighlightKey {
+				syntax_version: 1,
+				theme_epoch: 0,
+				tile_idx: 0,
+			},
+			spans: Vec::new(),
+		},
+	);
+
+	cache.invalidate_document(DocumentId(1));
+
+	assert_eq!(cache.tiles.len(), 1);
+	assert_eq!(cache.mru_order.len(), 1);
+	assert!(cache.index.get(&DocumentId(1)).is_none());
+	assert!(cache.index.get(&DocumentId(2)).is_some_and(|doc| doc.contains_key(&0)));
+}

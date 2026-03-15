@@ -88,7 +88,6 @@ impl Syntax {
 		}
 
 		self.opts = opts;
-		let text = RopeText::from_slice(source);
 
 		if let Some(meta) = &self.viewport {
 			let coverage = remap_viewport_range(meta.base_offset..meta.base_offset + meta.real_len, edits);
@@ -108,6 +107,7 @@ impl Syntax {
 				sealed_source: sealed,
 			});
 		} else {
+			let text = RopeText::from_slice(source);
 			let change_set = ChangeSet::new(edits.iter().map(|edit| {
 				let replacement = text.byte_text(edit.start_byte..edit.new_end_byte);
 				TextEdit::new(edit.start_byte..edit.old_end_byte, replacement)

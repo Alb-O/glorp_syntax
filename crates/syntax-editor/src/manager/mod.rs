@@ -70,18 +70,22 @@ impl ViewportCache {
 	}
 
 	pub fn get_mut_or_insert(&mut self, key: ViewportKey) -> &mut ViewportEntry {
-		if self.map.contains_key(&key) {
-			self.touch(key);
-		} else {
-			if self.order.len() >= self.cap
-				&& let Some(evicted) = self.order.pop_back()
-			{
-				self.map.remove(&evicted);
-			}
+		if let Some(pos) = self.order.iter().position(|entry| *entry == key) {
+			self.order.remove(pos);
 			self.order.push_front(key);
-			self.map.insert(key, ViewportEntry::default());
+			return self
+				.map
+				.get_mut(&key)
+				.expect("viewport order and map must stay in sync");
 		}
-		self.map.get_mut(&key).expect("viewport entry inserted above")
+
+		if self.order.len() >= self.cap
+			&& let Some(evicted) = self.order.pop_back()
+		{
+			self.map.remove(&evicted);
+		}
+		self.order.push_front(key);
+		self.map.entry(key).or_default()
 	}
 
 	pub fn touch(&mut self, key: ViewportKey) {

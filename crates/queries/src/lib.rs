@@ -63,13 +63,7 @@ impl TextObjectQuery {
 	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
 		let capture = self.query.get_capture(capture_name)?;
 		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
-		Some(matched.into_iter().filter_map(|nodes| {
-			if nodes.len() > 1 {
-				Some(CapturedNode::Grouped(nodes))
-			} else {
-				nodes.into_iter().map(CapturedNode::Single).next()
-			}
-		}))
+		Some(matched.into_iter().filter_map(CapturedNode::from_nodes))
 	}
 
 	pub fn capture_nodes_any<'a>(
@@ -77,13 +71,7 @@ impl TextObjectQuery {
 	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
 		let capture = capture_names.iter().find_map(|name| self.query.get_capture(name))?;
 		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
-		Some(matched.into_iter().filter_map(|nodes| {
-			if nodes.len() > 1 {
-				Some(CapturedNode::Grouped(nodes))
-			} else {
-				nodes.into_iter().map(CapturedNode::Single).next()
-			}
-		}))
+		Some(matched.into_iter().filter_map(CapturedNode::from_nodes))
 	}
 }
 
@@ -94,7 +82,15 @@ pub enum CapturedNode<'a> {
 	Grouped(Vec<Node<'a>>),
 }
 
-impl CapturedNode<'_> {
+impl<'a> CapturedNode<'a> {
+	fn from_nodes(nodes: Vec<Node<'a>>) -> Option<Self> {
+		if nodes.len() > 1 {
+			Some(Self::Grouped(nodes))
+		} else {
+			nodes.into_iter().next().map(Self::Single)
+		}
+	}
+
 	pub fn start_byte(&self) -> usize {
 		match self {
 			Self::Single(node) => node.start_byte() as usize,

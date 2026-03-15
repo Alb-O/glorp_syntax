@@ -38,9 +38,7 @@ impl QueryBundle {
 	}
 
 	pub fn merge(&mut self, other: QueryBundle) {
-		for (kind, text) in other.queries {
-			self.queries.insert(kind, text);
-		}
+		self.queries.extend(other.queries);
 	}
 
 	pub fn into_queries(self) -> BTreeMap<String, String> {

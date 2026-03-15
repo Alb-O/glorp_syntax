@@ -83,26 +83,12 @@ impl DocumentSession {
 	}
 
 	pub fn apply_edits(&mut self, edits: &ChangeSet, loader: &impl LanguageLoader) -> Result<UpdateResult, Error> {
-		let normalized = normalize_edits(self.text.as_ref(), edits)?;
 		if edits.is_empty() {
-			return Ok(UpdateResult {
-				revision: self.revision,
-				snapshot_id: self.snapshot_id,
-				changed_ranges: Vec::new(),
-				timed_out: false,
-				snapshot_changed: false,
-				affected_layers: self.syntax.layer_count(),
-			});
+			return Ok(self.unchanged_result());
 		}
+		let normalized = normalize_edits(self.text.as_ref(), edits)?;
 		if normalized.is_empty() {
-			return Ok(UpdateResult {
-				revision: self.revision,
-				snapshot_id: self.snapshot_id,
-				changed_ranges: Vec::new(),
-				timed_out: false,
-				snapshot_changed: false,
-				affected_layers: self.syntax.layer_count(),
-			});
+			return Ok(self.unchanged_result());
 		}
 
 		let mut text = self.text.as_ref().clone();
@@ -142,6 +128,17 @@ impl DocumentSession {
 			affected_layers: self.syntax.layer_count(),
 		})
 	}
+
+	fn unchanged_result(&self) -> UpdateResult {
+		UpdateResult {
+			revision: self.revision,
+			snapshot_id: self.snapshot_id,
+			changed_ranges: Vec::new(),
+			timed_out: false,
+			snapshot_changed: false,
+			affected_layers: self.syntax.layer_count(),
+		}
+	}
 }
 
 fn apply_edit(text: &mut Rope, edit: &TextEdit) -> Result<(), Error> {
@@ -170,7 +167,7 @@ fn validate_edit(text: &Rope, edit: &TextEdit) -> Result<(), Error> {
 }
 
 fn normalize_edits(text: &Rope, edits: &ChangeSet) -> Result<Vec<TextEdit>, Error> {
-	let mut normalized = Vec::new();
+	let mut normalized = Vec::with_capacity(edits.iter().size_hint().0);
 	for edit in edits.iter() {
 		validate_edit(text, edit)?;
 		if text.byte_text(edit.range.clone()) != edit.replacement {

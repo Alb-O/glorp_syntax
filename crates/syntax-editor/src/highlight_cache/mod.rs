@@ -93,12 +93,13 @@ impl<S> HighlightTiles<S> {
 		let Some(indices) = self.index.remove(&doc_id) else {
 			return;
 		};
-		for (_, idx) in indices {
-			self.mru_order.retain(|entry| *entry != idx);
+		let mut removed = vec![false; self.tiles.len()];
+		for idx in indices.into_values() {
+			if let Some(slot) = removed.get_mut(idx) {
+				*slot = true;
+			}
 		}
-		if self.index.is_empty() {
-			self.tiles.clear();
-		}
+		self.compact_tiles(&removed);
 	}
 
 	pub fn get_spans<Loader, Resolve>(
@@ -201,6 +202,42 @@ impl<S> HighlightTiles<S> {
 		self.mru_order.push_front(idx);
 		self.index.entry(doc_id).or_default().insert(tile_idx, idx);
 		idx
+	}
+
+	fn compact_tiles(&mut self, removed: &[bool]) {
+		if !removed.iter().any(|removed| *removed) {
+			return;
+		}
+
+		let mut remap = vec![None; self.tiles.len()];
+		let kept = self.tiles.len() - removed.iter().filter(|removed| **removed).count();
+		let mut next = 0usize;
+		let mut tiles = Vec::with_capacity(kept);
+		for (idx, tile) in self.tiles.drain(..).enumerate() {
+			if removed[idx] {
+				continue;
+			}
+			remap[idx] = Some(next);
+			tiles.push(tile);
+			next += 1;
+		}
+		self.tiles = tiles;
+
+		self.mru_order.retain(|idx| !removed[*idx]);
+		for idx in &mut self.mru_order {
+			*idx = remap[*idx].expect("kept MRU entry must have a remapped tile index");
+		}
+
+		self.index.retain(|_, doc_tiles| {
+			doc_tiles.retain(|_, idx| {
+				if removed[*idx] {
+					return false;
+				}
+				*idx = remap[*idx].expect("kept tile index must be remapped");
+				true
+			});
+			!doc_tiles.is_empty()
+		});
 	}
 }
 
