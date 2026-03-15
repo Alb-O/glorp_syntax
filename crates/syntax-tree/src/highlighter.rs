@@ -483,7 +483,8 @@ impl HighlightSpan {
 /// Iterator wrapper that emits contiguous highlight spans.
 pub struct HighlightSpans<'a, Loader>
 where
-	Loader: LanguageLoader, {
+	Loader: LanguageLoader,
+{
 	inner: HighlightEvents<'a, 'a, Loader>,
 	current_start: u32,
 	current_highlight: Option<Highlight>,
@@ -551,15 +552,11 @@ where
 	}
 
 	fn close_span(&self, event_start_doc: u32) -> Option<HighlightSpan> {
-		self.current_highlight.and_then(|highlight| {
-			if event_start_doc == u32::MAX {
-				return None;
-			}
-			(self.current_start < event_start_doc).then_some(HighlightSpan {
-				start: self.current_start,
-				end: event_start_doc,
-				highlight,
-			})
+		let highlight = self.current_highlight?;
+		(event_start_doc != u32::MAX && self.current_start < event_start_doc).then_some(HighlightSpan {
+			start: self.current_start,
+			end: event_start_doc,
+			highlight,
 		})
 	}
 }

@@ -105,7 +105,7 @@ where
 			} else {
 				self.loader
 					.get_query(layer.language)
-					.and_then(|query| Some((query, layer.tree()?.root_node())))
+					.and_then(|query| layer.tree().map(|tree| (query, tree.root_node())))
 					.map(|(query, node)| {
 						InactiveQueryCursor::new(self.range.clone(), TREE_SITTER_MATCH_LIMIT).execute_query(
 							query,

@@ -27,7 +27,7 @@ impl<'tree> TreeCursor<'tree> {
 	pub fn goto_parent(&mut self) -> bool {
 		if self.cursor.goto_parent() {
 			return true;
-		};
+		}
 
 		loop {
 			// Ascend to the parent layer if one exists.
@@ -47,7 +47,8 @@ impl<'tree> TreeCursor<'tree> {
 
 	pub fn goto_parent_with<P>(&mut self, predicate: P) -> bool
 	where
-		P: Fn(&Node) -> bool, {
+		P: Fn(&Node) -> bool,
+	{
 		while self.goto_parent() {
 			if predicate(&self.node()) {
 				return true;
@@ -60,15 +61,16 @@ impl<'tree> TreeCursor<'tree> {
 	pub fn goto_first_child(&mut self) -> bool {
 		let range = self.cursor.node().byte_range();
 		let layer = self.syntax.layer(self.current);
-		if let Some((layer, tree)) = layer
+		if let Some(injection) = layer
 			.injection_at_byte_idx(range.start)
 			.filter(|injection| injection.range.end >= range.end)
-			.and_then(|injection| Some((injection.layer, self.syntax.layer(injection.layer).tree()?)))
 		{
-			// Switch to the child layer.
-			self.current = layer;
-			self.cursor = tree.walk();
-			return true;
+			if let Some(tree) = self.syntax.layer(injection.layer).tree() {
+				// Switch to the child layer.
+				self.current = injection.layer;
+				self.cursor = tree.walk();
+				return true;
+			}
 		}
 
 		self.cursor.goto_first_child()

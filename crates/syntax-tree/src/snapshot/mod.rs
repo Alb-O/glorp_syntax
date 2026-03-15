@@ -5,7 +5,7 @@ use {
 		highlighter::HighlightSpans,
 		locals::{Definition, Locals},
 		query_iter::{QueryIter, QueryLoader},
-		text::DocumentText,
+		text::{ByteRangeText, DocumentText},
 	},
 	ropey::{Rope, RopeSlice},
 	std::{ops::RangeBounds, sync::Arc},
@@ -71,9 +71,7 @@ impl DocumentSnapshot {
 	}
 
 	pub fn byte_text(&self, range: std::ops::Range<u32>) -> String {
-		let end = range.end.min(self.len_bytes());
-		let start = range.start.min(end);
-		self.text.byte_slice(start as usize..end as usize).to_string()
+		self.text().byte_text(range)
 	}
 
 	pub fn tree(&self) -> &Tree {
@@ -124,16 +122,18 @@ impl DocumentSnapshot {
 		&'a self, loader: &'a Loader, range: impl RangeBounds<u32>,
 	) -> HighlightSpans<'a, Loader>
 	where
-		Loader: LanguageLoader, {
+		Loader: LanguageLoader,
+	{
 		HighlightSpans::new(self.syntax(), self.rope_slice(), loader, range)
 	}
 
 	pub fn locals_at(&self, byte: u32) -> LocalScope<'_> {
 		let layer = self.layer_for_byte_range(byte, byte);
 		let locals = self.layer(layer).locals();
-		let cursor = locals.scope_cursor(byte);
-		let scope = cursor.current_scope();
-		LocalScope { locals, scope }
+		LocalScope {
+			locals,
+			scope: locals.scope_cursor(byte).current_scope(),
+		}
 	}
 
 	pub fn query_iter<'a, Loader, State>(
@@ -141,7 +141,8 @@ impl DocumentSnapshot {
 	) -> QueryIter<'a, 'a, Loader, State>
 	where
 		Loader: QueryLoader<'a>,
-		State: Default, {
+		State: Default,
+	{
 		QueryIter::new(self.syntax(), self.rope_slice(), loader, range)
 	}
 

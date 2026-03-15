@@ -1,4 +1,7 @@
-use ropey::{Rope, RopeSlice};
+use {
+	ropey::{Rope, RopeSlice},
+	std::ops::Range,
+};
 
 pub trait TextSlice {
 	fn len_bytes(&self) -> usize;
@@ -57,6 +60,12 @@ impl StringText {
 	pub fn as_str(&self) -> &str {
 		&self.text
 	}
+}
+
+fn clamp_byte_range(range: Range<u32>, len: u32) -> Range<usize> {
+	let end = range.end.min(len);
+	let start = range.start.min(end);
+	start as usize..end as usize
 }
 
 impl TextSlice for RopeSlice<'_> {
@@ -121,17 +130,16 @@ impl TextStorage for str {
 
 impl ByteRangeText for Rope {
 	fn byte_text(&self, range: std::ops::Range<u32>) -> String {
-		let end = range.end.min(self.len_bytes() as u32);
-		let start = range.start.min(end);
-		self.byte_slice(start as usize..end as usize).to_string()
+		self.byte_slice(clamp_byte_range(range, self.len_bytes() as u32))
+			.to_string()
 	}
 }
 
 impl ByteRangeText for DocumentText<'_> {
 	fn byte_text(&self, range: std::ops::Range<u32>) -> String {
-		let end = range.end.min(self.slice.len_bytes() as u32);
-		let start = range.start.min(end);
-		self.slice.byte_slice(start as usize..end as usize).to_string()
+		self.slice
+			.byte_slice(clamp_byte_range(range, self.slice.len_bytes() as u32))
+			.to_string()
 	}
 }
 
@@ -143,8 +151,6 @@ impl ByteRangeText for RopeText {
 
 impl ByteRangeText for StringText {
 	fn byte_text(&self, range: std::ops::Range<u32>) -> String {
-		let end = range.end.min(self.text.len() as u32) as usize;
-		let start = range.start.min(range.end).min(end as u32) as usize;
-		self.text[start..end].to_owned()
+		self.text[clamp_byte_range(range, self.text.len() as u32)].to_owned()
 	}
 }

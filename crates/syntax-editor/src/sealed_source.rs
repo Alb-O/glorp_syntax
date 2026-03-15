@@ -30,17 +30,14 @@ impl SealedSource {
 	}
 
 	pub fn from_byte_range(source: RopeSlice<'_>, range: Range<u32>, suffix: &str) -> Self {
-		let len = source.len_bytes() as u32;
-		let start = range.start.min(len);
-		let end = range.end.min(len).max(start);
-		Self::from_window(source.byte_slice(start as usize..end as usize), suffix)
+		Self::from_window(
+			source.byte_slice(clamp_byte_range(range, source.len_bytes() as u32)),
+			suffix,
+		)
 	}
 
 	pub fn from_byte_range_with_newline_padding(source: RopeSlice<'_>, range: Range<u32>) -> Self {
-		let len = source.len_bytes() as u32;
-		let start = range.start.min(len);
-		let end = range.end.min(len).max(start);
-		let window = source.byte_slice(start as usize..end as usize);
+		let window = source.byte_slice(clamp_byte_range(range, source.len_bytes() as u32));
 		let suffix = if needs_line_padding(window) { "\n" } else { "" };
 		Self::from_window(window, suffix)
 	}
@@ -48,6 +45,12 @@ impl SealedSource {
 	pub fn slice(&self) -> RopeSlice<'_> {
 		self.rope.slice(..)
 	}
+}
+
+fn clamp_byte_range(range: Range<u32>, len: u32) -> Range<usize> {
+	let end = range.end.min(len);
+	let start = range.start.min(end);
+	start as usize..end as usize
 }
 
 fn needs_line_padding(window: RopeSlice<'_>) -> bool {
