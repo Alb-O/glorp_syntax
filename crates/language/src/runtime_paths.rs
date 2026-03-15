@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
 pub fn runtime_dir() -> PathBuf {
-	if let Ok(runtime) = std::env::var("LINEY_RUNTIME") {
+	if let Ok(runtime) = std::env::var("GLORP_SYNTAX_RUNTIME") {
 		return PathBuf::from(runtime);
 	}
 
 	data_local_dir()
-		.map(|dir| dir.join("liney"))
+		.map(|dir| dir.join("glorp_syntax"))
 		.unwrap_or_else(|| PathBuf::from("."))
 }
 
@@ -16,11 +16,11 @@ pub fn cache_dir() -> Option<PathBuf> {
 		std::env::var_os("XDG_CACHE_HOME")
 			.map(PathBuf::from)
 			.or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
-			.map(|path| path.join("liney"))
+			.map(|path| path.join("glorp_syntax"))
 	}
 	#[cfg(windows)]
 	{
-		std::env::var_os("LOCALAPPDATA").map(|path| PathBuf::from(path).join("liney").join("cache"))
+		std::env::var_os("LOCALAPPDATA").map(|path| PathBuf::from(path).join("glorp_syntax").join("cache"))
 	}
 	#[cfg(not(any(unix, windows)))]
 	{
@@ -31,14 +31,14 @@ pub fn cache_dir() -> Option<PathBuf> {
 pub fn grammar_search_paths() -> Vec<PathBuf> {
 	let mut dirs = Vec::new();
 
-	if let Ok(runtime) = std::env::var("LINEY_RUNTIME") {
+	if let Ok(runtime) = std::env::var("GLORP_SYNTAX_RUNTIME") {
 		dirs.push(PathBuf::from(runtime).join("grammars"));
 	}
 
 	if let Ok(exe) = std::env::current_exe()
 		&& let Some(bin_dir) = exe.parent()
 	{
-		dirs.push(bin_dir.join("..").join("share").join("liney").join("grammars"));
+		dirs.push(bin_dir.join("..").join("share").join("glorp_syntax").join("grammars"));
 	}
 
 	if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR")
@@ -52,7 +52,7 @@ pub fn grammar_search_paths() -> Vec<PathBuf> {
 	}
 
 	if let Some(data) = data_local_dir() {
-		dirs.push(data.join("liney").join("grammars"));
+		dirs.push(data.join("glorp_syntax").join("grammars"));
 	}
 
 	for helix_dir in helix_runtime_dirs() {
@@ -65,12 +65,12 @@ pub fn grammar_search_paths() -> Vec<PathBuf> {
 pub fn query_search_paths() -> Vec<PathBuf> {
 	let mut dirs = Vec::new();
 
-	if let Ok(runtime) = std::env::var("LINEY_RUNTIME") {
+	if let Ok(runtime) = std::env::var("GLORP_SYNTAX_RUNTIME") {
 		dirs.push(PathBuf::from(runtime).join("queries"));
 	}
 
 	if let Some(data) = data_local_dir() {
-		dirs.push(data.join("liney").join("queries"));
+		dirs.push(data.join("glorp_syntax").join("queries"));
 	}
 
 	for helix_dir in helix_runtime_dirs() {

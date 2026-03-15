@@ -1,6 +1,6 @@
 use {
 	crate::{HighlightSpans, Language, LanguageLoader, SealedSource, TreeCursor, tree_sitter::InputEdit},
-	liney_syntax_tree::{
+	glorp_syntax_tree::{
 		self as tree_house, ByteRangeText, ChangeSet, DocumentSession, EngineConfig, RopeText, TextEdit,
 		tree_sitter::Node,
 	},

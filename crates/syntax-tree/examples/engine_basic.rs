@@ -1,5 +1,5 @@
 use {
-	liney_syntax_tree::{
+	glorp_syntax_tree::{
 		DocumentSession, EngineConfig, HighlightSpan, Language, SingleLanguageLoader, StringText,
 		highlighter::Highlight, tree_sitter::Grammar,
 	},

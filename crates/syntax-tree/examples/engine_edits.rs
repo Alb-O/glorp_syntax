@@ -1,5 +1,5 @@
 use {
-	liney_syntax_tree::{
+	glorp_syntax_tree::{
 		ChangeSet, DocumentSession, EngineConfig, Language, SingleLanguageLoader, StringText, tree_sitter::Grammar,
 	},
 	std::error::Error,

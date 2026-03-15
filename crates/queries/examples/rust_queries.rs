@@ -1,6 +1,6 @@
 use {
-	liney_queries::{RainbowQuery, TagQuery, TextObjectQuery},
-	liney_syntax_tree::{
+	glorp_syntax_queries::{RainbowQuery, TagQuery, TextObjectQuery},
+	glorp_syntax_tree::{
 		DocumentSession, EngineConfig, Language, SingleLanguageLoader, StringText, tree_sitter::Grammar,
 	},
 	std::error::Error,

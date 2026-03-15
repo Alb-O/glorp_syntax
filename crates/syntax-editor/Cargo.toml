@@ -1,12 +1,12 @@
 [package]
-name = "liney-syntax-editor"
-description = "Syntax document state, viewport selection, and tiled highlighting on top of liney-syntax-tree"
+name = "glorp_syntax_editor"
+description = "Syntax document state, viewport selection, and tiled highlighting on top of glorp_syntax_tree"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-liney-syntax-tree = { path = "../syntax-tree" }
+glorp_syntax_tree = { path = "../syntax-tree" }
 ropey.workspace = true
 tree-sitter = { workspace = true, features = ["ropey"] }
 

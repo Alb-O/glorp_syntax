@@ -1,6 +1,6 @@
 use {
-	liney_queries::TagQuery,
-	liney_syntax_tree::{
+	glorp_syntax_queries::TagQuery,
+	glorp_syntax_tree::{
 		DocumentSession, EngineConfig, Language, SingleLanguageLoader, StringText, tree_sitter::Grammar,
 	},
 	std::error::Error,

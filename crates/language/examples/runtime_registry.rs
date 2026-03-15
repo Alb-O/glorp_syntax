@@ -1,5 +1,5 @@
 use {
-	liney_language::{GrammarLocator, LanguageId, LanguageRegistry, LanguageSpec, QueryLocator},
+	glorp_syntax_language::{GrammarLocator, LanguageId, LanguageRegistry, LanguageSpec, QueryLocator},
 	std::{
 		error::Error,
 		fs,
@@ -12,7 +12,7 @@ fn temp_root(name: &str) -> std::path::PathBuf {
 		.duration_since(UNIX_EPOCH)
 		.expect("time should be after unix epoch")
 		.as_nanos();
-	let root = std::env::temp_dir().join(format!("liney-runtime-example-{name}-{nonce}"));
+	let root = std::env::temp_dir().join(format!("glorp_syntax-runtime-example-{name}-{nonce}"));
 	fs::create_dir_all(&root).expect("temp root should be created");
 	root
 }

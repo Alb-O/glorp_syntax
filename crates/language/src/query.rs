@@ -1,4 +1,4 @@
-use {liney_syntax_tree::read_query as resolve_inherits, std::path::PathBuf};
+use {glorp_syntax_tree::read_query as resolve_inherits, std::path::PathBuf};
 
 /// Reads a query from the default runtime/query search paths and resolves
 /// `; inherits` directives recursively.
@@ -39,7 +39,7 @@ mod tests {
 			.duration_since(UNIX_EPOCH)
 			.expect("time should be after unix epoch")
 			.as_nanos();
-		let root = std::env::temp_dir().join(format!("liney-language-{name}-{nonce}"));
+		let root = std::env::temp_dir().join(format!("glorp_syntax_language-{name}-{nonce}"));
 		fs::create_dir_all(&root).expect("temp root should be created");
 		root
 	}

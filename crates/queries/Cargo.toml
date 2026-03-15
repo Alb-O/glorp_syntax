@@ -1,12 +1,12 @@
 [package]
-name = "liney-queries"
+name = "glorp_syntax_queries"
 description = "Reusable structural query helpers"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-liney-syntax-tree = { path = "../syntax-tree" }
+glorp_syntax_tree = { path = "../syntax-tree" }
 ropey.workspace = true
 
 [dev-dependencies]

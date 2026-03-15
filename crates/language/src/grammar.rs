@@ -4,7 +4,7 @@ use {
 	tracing::{info, warn},
 };
 use {
-	liney_syntax_tree::tree_sitter::Grammar,
+	glorp_syntax_tree::tree_sitter::Grammar,
 	std::path::{Path, PathBuf},
 	thiserror::Error,
 };
@@ -74,7 +74,7 @@ pub fn load_or_build_grammar_from_paths(
 		Err(error) => return Err(error),
 	}
 
-	if std::env::var_os("LINEY_DISABLE_JIT_GRAMMARS").is_some() {
+	if std::env::var_os("GLORP_SYNTAX_DISABLE_JIT_GRAMMARS").is_some() {
 		return Err(GrammarError::JitDisabled(config.grammar_id.clone()));
 	}
 

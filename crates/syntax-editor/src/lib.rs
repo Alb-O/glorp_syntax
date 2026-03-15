@@ -9,12 +9,12 @@ mod sealed_source;
 mod syntax;
 
 pub use {
-	highlight_cache::{HighlightKey, HighlightSpanQuery, HighlightTile, HighlightTiles, TILE_SIZE},
-	liney_syntax_tree::{
+	glorp_syntax_tree::{
 		Language, LanguageConfig, LanguageLoader, SingleLanguageLoader, TreeCursor,
 		highlighter::{Highlight, HighlightSpan, HighlightSpans},
 		tree_sitter,
 	},
+	highlight_cache::{HighlightKey, HighlightSpanQuery, HighlightTile, HighlightTiles, TILE_SIZE},
 	manager::{
 		DocumentId, InstalledSyntax, SyntaxManager, SyntaxSelection, SyntaxSlot, ViewportEntry, ViewportKey,
 		ViewportSyntax,

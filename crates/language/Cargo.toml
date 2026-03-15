@@ -1,5 +1,5 @@
 [package]
-name = "liney-language"
+name = "glorp_syntax_language"
 description = "Grammar loading, query lookup, and grammar/query fetch-build helpers"
 version.workspace = true
 edition.workspace = true
@@ -13,6 +13,6 @@ helix-runtime = ["default-runtime-paths"]
 
 [dependencies]
 cc.workspace = true
-liney-syntax-tree = { path = "../syntax-tree" }
+glorp_syntax_tree = { path = "../syntax-tree" }
 thiserror.workspace = true
 tracing.workspace = true

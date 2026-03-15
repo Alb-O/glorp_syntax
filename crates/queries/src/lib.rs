@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::print_stderr)]
 
-//! Structural tree-sitter query helpers built on top of `liney_syntax_tree`.
+//! Structural tree-sitter query helpers built on top of `glorp_syntax_tree`.
 
-pub use liney_syntax_tree::read_query;
-use liney_syntax_tree::{
+pub use glorp_syntax_tree::read_query;
+use glorp_syntax_tree::{
 	DocumentSnapshot,
 	tree_sitter::{
 		Grammar, Node, Query,
@@ -17,13 +17,13 @@ use liney_syntax_tree::{
 #[allow(dead_code, reason = "captures reserved for future indentation features")]
 pub struct IndentQuery {
 	query: Query,
-	indent_capture: Option<liney_syntax_tree::tree_sitter::Capture>,
-	dedent_capture: Option<liney_syntax_tree::tree_sitter::Capture>,
-	extend_capture: Option<liney_syntax_tree::tree_sitter::Capture>,
+	indent_capture: Option<glorp_syntax_tree::tree_sitter::Capture>,
+	dedent_capture: Option<glorp_syntax_tree::tree_sitter::Capture>,
+	extend_capture: Option<glorp_syntax_tree::tree_sitter::Capture>,
 }
 
 impl IndentQuery {
-	pub fn new(grammar: Grammar, source: &str) -> Result<Self, liney_syntax_tree::tree_sitter::query::ParseError> {
+	pub fn new(grammar: Grammar, source: &str) -> Result<Self, glorp_syntax_tree::tree_sitter::query::ParseError> {
 		let query = Query::new(grammar, source, |_pattern, predicate| match predicate {
 			UserPredicate::SetProperty {
 				key:
@@ -53,7 +53,7 @@ pub struct TextObjectQuery {
 }
 
 impl TextObjectQuery {
-	pub fn new(grammar: Grammar, source: &str) -> Result<Self, liney_syntax_tree::tree_sitter::query::ParseError> {
+	pub fn new(grammar: Grammar, source: &str) -> Result<Self, glorp_syntax_tree::tree_sitter::query::ParseError> {
 		let query = Query::new(grammar, source, |_, _| Ok(()))?;
 		Ok(Self { query })
 	}
@@ -117,7 +117,7 @@ pub struct TagQuery {
 }
 
 impl TagQuery {
-	pub fn new(grammar: Grammar, source: &str) -> Result<Self, liney_syntax_tree::tree_sitter::query::ParseError> {
+	pub fn new(grammar: Grammar, source: &str) -> Result<Self, glorp_syntax_tree::tree_sitter::query::ParseError> {
 		let query = Query::new(grammar, source, |_pattern, predicate| match predicate {
 			UserPredicate::IsPropertySet { key: "local", .. } => Ok(()),
 			UserPredicate::Other(pred) => match pred.name() {
@@ -143,12 +143,12 @@ impl TagQuery {
 #[derive(Debug)]
 pub struct RainbowQuery {
 	pub query: Query,
-	pub scope_capture: Option<liney_syntax_tree::tree_sitter::Capture>,
-	pub bracket_capture: Option<liney_syntax_tree::tree_sitter::Capture>,
+	pub scope_capture: Option<glorp_syntax_tree::tree_sitter::Capture>,
+	pub bracket_capture: Option<glorp_syntax_tree::tree_sitter::Capture>,
 }
 
 impl RainbowQuery {
-	pub fn new(grammar: Grammar, source: &str) -> Result<Self, liney_syntax_tree::tree_sitter::query::ParseError> {
+	pub fn new(grammar: Grammar, source: &str) -> Result<Self, glorp_syntax_tree::tree_sitter::query::ParseError> {
 		let query = Query::new(grammar, source, |_pattern, predicate| match predicate {
 			UserPredicate::SetProperty {
 				key: "rainbow.include-children",
@@ -194,7 +194,7 @@ impl RainbowQuery {
 mod tests {
 	use {
 		super::*,
-		liney_syntax_tree::{
+		glorp_syntax_tree::{
 			DocumentSession, DocumentSnapshot, EngineConfig, Language, SingleLanguageLoader, StringText,
 		},
 		std::error::Error,

@@ -4,7 +4,7 @@ use {
 		grammar::{GrammarError, load_grammar_from_paths},
 		query::read_query_from_paths,
 	},
-	liney_syntax_tree::tree_sitter::Grammar,
+	glorp_syntax_tree::tree_sitter::Grammar,
 	std::{collections::BTreeMap, fmt, path::PathBuf},
 };
 
@@ -170,7 +170,7 @@ mod tests {
 			.duration_since(UNIX_EPOCH)
 			.expect("time should be after unix epoch")
 			.as_nanos();
-		let root = std::env::temp_dir().join(format!("liney-registry-{name}-{nonce}"));
+		let root = std::env::temp_dir().join(format!("glorp_syntax-registry-{name}-{nonce}"));
 		fs::create_dir_all(&root).expect("temp root should be created");
 		root
 	}

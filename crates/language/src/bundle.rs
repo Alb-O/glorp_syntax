@@ -96,7 +96,7 @@ mod tests {
 			.duration_since(UNIX_EPOCH)
 			.expect("time should be after unix epoch")
 			.as_nanos();
-		let root = std::env::temp_dir().join(format!("liney-bundle-{name}-{nonce}"));
+		let root = std::env::temp_dir().join(format!("glorp_syntax-bundle-{name}-{nonce}"));
 		fs::create_dir_all(&root).expect("temp root should be created");
 		root
 	}

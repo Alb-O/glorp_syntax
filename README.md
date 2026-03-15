@@ -1,4 +1,4 @@
-# liney-syntax
+# glorp_syntax
 
 Reusable Rust crates for tree-sitter engines, runtime loading, editor adapters,
 and structural query helpers.
@@ -18,7 +18,7 @@ and structural query helpers.
 ## Use
 
 ```rust
-use liney_syntax_tree::{
+use glorp_syntax_tree::{
     DocumentSession, EngineConfig, Language, SingleLanguageLoader, StringText,
     tree_sitter::Grammar,
 };
@@ -37,8 +37,8 @@ let node = snapshot.named_node_at(3, 9);
 
 ## Features
 
-- `liney-language` defaults: `default-runtime-paths`, `jit-grammars`, `helix-runtime`
-- `liney-language --no-default-features`: explicit-path runtime and registry only
+- `glorp_syntax_language` defaults: `default-runtime-paths`, `jit-grammars`, `helix-runtime`
+- `glorp_syntax_language --no-default-features`: explicit-path runtime and registry only
 
 ## Examples
 
