@@ -64,13 +64,12 @@ impl<'tree> TreeCursor<'tree> {
 		if let Some(injection) = layer
 			.injection_at_byte_idx(range.start)
 			.filter(|injection| injection.range.end >= range.end)
+			&& let Some(tree) = self.syntax.layer(injection.layer).tree()
 		{
-			if let Some(tree) = self.syntax.layer(injection.layer).tree() {
-				// Switch to the child layer.
-				self.current = injection.layer;
-				self.cursor = tree.walk();
-				return true;
-			}
+			// Switch to the child layer.
+			self.current = injection.layer;
+			self.cursor = tree.walk();
+			return true;
 		}
 
 		self.cursor.goto_first_child()

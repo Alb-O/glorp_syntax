@@ -95,6 +95,6 @@ fn invalidate_document_reclaims_dead_tile_slots() {
 
 	assert_eq!(cache.tiles.len(), 1);
 	assert_eq!(cache.mru_order.len(), 1);
-	assert!(cache.index.get(&DocumentId(1)).is_none());
+	assert!(!cache.index.contains_key(&DocumentId(1)));
 	assert!(cache.index.get(&DocumentId(2)).is_some_and(|doc| doc.contains_key(&0)));
 }

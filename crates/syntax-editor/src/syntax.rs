@@ -174,7 +174,8 @@ impl Syntax {
 		&'a self, loader: &'a Loader, range: impl RangeBounds<u32>,
 	) -> HighlightSpans<'a, Loader>
 	where
-		Loader: LanguageLoader, {
+		Loader: LanguageLoader,
+	{
 		if let Some(meta) = &self.viewport {
 			HighlightSpans::new_mapped(
 				self.snapshot.syntax(),

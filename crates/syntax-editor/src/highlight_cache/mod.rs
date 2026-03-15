@@ -29,7 +29,8 @@ pub struct HighlightSpanQuery<'a, Loader, Resolve, S>
 where
 	Loader: LanguageLoader,
 	Resolve: Fn(Highlight) -> S,
-	S: Copy, {
+	S: Copy,
+{
 	pub doc_id: DocumentId,
 	pub syntax_version: u64,
 	pub rope: &'a Rope,
@@ -108,7 +109,8 @@ impl<S> HighlightTiles<S> {
 	where
 		Loader: LanguageLoader,
 		Resolve: Fn(Highlight) -> S,
-		S: Copy, {
+		S: Copy,
+	{
 		if q.start_line >= q.end_line {
 			return Vec::new();
 		}
@@ -156,7 +158,8 @@ impl<S> HighlightTiles<S> {
 	where
 		Loader: LanguageLoader,
 		Resolve: Fn(Highlight) -> S,
-		S: Copy, {
+		S: Copy,
+	{
 		if let Some(&idx) = self.index.get(&q.doc_id).and_then(|doc| doc.get(&tile_idx))
 			&& self.tiles[idx].key == key
 		{
@@ -188,9 +191,10 @@ impl<S> HighlightTiles<S> {
 		if self.tiles.len() == self.max_tiles
 			&& let Some(evicted_idx) = self.mru_order.pop_back()
 		{
-			for doc_tiles in self.index.values_mut() {
+			self.index.retain(|_, doc_tiles| {
 				doc_tiles.retain(|_, idx| *idx != evicted_idx);
-			}
+				!doc_tiles.is_empty()
+			});
 			self.tiles[evicted_idx] = tile;
 			self.mru_order.push_front(evicted_idx);
 			self.index.entry(doc_id).or_default().insert(tile_idx, evicted_idx);
@@ -255,7 +259,8 @@ fn build_tile_spans<Loader, Resolve, S>(
 where
 	Loader: LanguageLoader,
 	Resolve: Fn(Highlight) -> S,
-	S: Copy, {
+	S: Copy,
+{
 	let rope_len_bytes = rope.len_bytes() as u32;
 	if syntax.tree().root_node().end_byte() > rope_len_bytes {
 		return Vec::new();

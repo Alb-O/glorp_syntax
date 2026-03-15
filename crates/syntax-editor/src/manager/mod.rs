@@ -70,9 +70,7 @@ impl ViewportCache {
 	}
 
 	pub fn get_mut_or_insert(&mut self, key: ViewportKey) -> &mut ViewportEntry {
-		if let Some(pos) = self.order.iter().position(|entry| *entry == key) {
-			self.order.remove(pos);
-			self.order.push_front(key);
+		if self.promote(key) {
 			return self
 				.map
 				.get_mut(&key)
@@ -89,10 +87,7 @@ impl ViewportCache {
 	}
 
 	pub fn touch(&mut self, key: ViewportKey) {
-		if let Some(pos) = self.order.iter().position(|entry| *entry == key) {
-			self.order.remove(pos);
-			self.order.push_front(key);
-		}
+		self.promote(key);
 	}
 
 	pub fn clear(&mut self) {
@@ -149,10 +144,10 @@ impl SyntaxSlot {
 
 	pub fn best_doc_version(&self) -> Option<u64> {
 		let full_ver = self.full.as_ref().map(|tree| tree.doc_version);
-		match (full_ver, self.viewport_cache.best_doc_version()) {
-			(Some(full), Some(viewport)) => Some(full.max(viewport)),
-			(full, viewport) => full.or(viewport),
-		}
+		[full_ver, self.viewport_cache.best_doc_version()]
+			.into_iter()
+			.flatten()
+			.max()
 	}
 
 	pub fn drop_full(&mut self) {
@@ -209,6 +204,17 @@ impl SyntaxSlot {
 		self.full_tree_memory.push_front(remembered);
 		self.updated = true;
 		self.change_id = self.change_id.wrapping_add(1);
+		true
+	}
+}
+
+impl ViewportCache {
+	fn promote(&mut self, key: ViewportKey) -> bool {
+		let Some(pos) = self.order.iter().position(|entry| *entry == key) else {
+			return false;
+		};
+		self.order.remove(pos);
+		self.order.push_front(key);
 		true
 	}
 }
@@ -283,8 +289,8 @@ impl SyntaxManager {
 		&self, doc_id: DocumentId, doc_version: u64, viewport: Range<u32>,
 	) -> Option<SyntaxSelection<'_>> {
 		let slot = self.document(doc_id)?;
-		let mut best_overlapping: Option<(SyntaxSelection<'_>, (bool, bool, bool, u64))> = None;
-		let mut best_any: Option<(SyntaxSelection<'_>, (bool, bool, bool, u64))> = None;
+		let mut best_overlapping: Option<ScoredSelection<'_>> = None;
+		let mut best_any: Option<ScoredSelection<'_>> = None;
 
 		if let Some(full) = slot.full.as_ref() {
 			consider_candidate(
@@ -408,14 +414,34 @@ fn overlaps(coverage: &Option<Range<u32>>, viewport: &Range<u32>) -> bool {
 	}
 }
 
-fn candidate_score(tree_doc_version: u64, is_full: bool, enriched: bool, doc_version: u64) -> (bool, bool, bool, u64) {
-	(tree_doc_version == doc_version, is_full, enriched, tree_doc_version)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct CandidateScore {
+	matches_doc_version: bool,
+	is_full: bool,
+	enriched: bool,
+	tree_doc_version: u64,
+}
+
+impl CandidateScore {
+	fn new(tree_doc_version: u64, is_full: bool, enriched: bool, doc_version: u64) -> Self {
+		Self {
+			matches_doc_version: tree_doc_version == doc_version,
+			is_full,
+			enriched,
+			tree_doc_version,
+		}
+	}
+}
+
+type ScoredSelection<'a> = (SyntaxSelection<'a>, CandidateScore);
+
+fn candidate_score(tree_doc_version: u64, is_full: bool, enriched: bool, doc_version: u64) -> CandidateScore {
+	CandidateScore::new(tree_doc_version, is_full, enriched, doc_version)
 }
 
 fn consider_candidate<'a>(
-	best_overlapping: &mut Option<(SyntaxSelection<'a>, (bool, bool, bool, u64))>,
-	best_any: &mut Option<(SyntaxSelection<'a>, (bool, bool, bool, u64))>, selection: SyntaxSelection<'a>,
-	enriched: bool, doc_version: u64, viewport: &Range<u32>,
+	best_overlapping: &mut Option<ScoredSelection<'a>>, best_any: &mut Option<ScoredSelection<'a>>,
+	selection: SyntaxSelection<'a>, enriched: bool, doc_version: u64, viewport: &Range<u32>,
 ) {
 	let score = candidate_score(
 		selection.tree_doc_version,

@@ -66,6 +66,6 @@ fn stale_viewports_do_not_reappear_after_newer_full_tree() {
 	assert!(
 		manager
 			.document(doc_id)
-			.is_some_and(|slot| slot.viewport_cache.map.get(&key).is_none())
+			.is_some_and(|slot| !slot.viewport_cache.map.contains_key(&key))
 	);
 }
