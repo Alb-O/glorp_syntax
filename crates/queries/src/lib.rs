@@ -227,9 +227,7 @@ impl RainbowQuery {
 mod tests {
 	use {
 		super::*,
-		glorp_syntax_tree::{
-			DocumentSession, DocumentSnapshot, EngineConfig, Language, SingleLanguageLoader, StringText,
-		},
+		glorp_syntax_tree::{DocumentSession, DocumentSnapshot, EngineConfig, SingleLanguageLoader, StringText},
 		std::error::Error,
 	};
 
@@ -263,7 +261,7 @@ fn beta(arg: i32) -> i32 {
 
 	fn root() -> Result<(DocumentSnapshot, SingleLanguageLoader), Box<dyn Error>> {
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE)?;
-		let loader = SingleLanguageLoader::from_queries(Language::new(0), grammar, "", "", "")?;
+		let loader = SingleLanguageLoader::from_queries(grammar, "", "", "")?;
 		let session = DocumentSession::new(
 			loader.language(),
 			&StringText::new(SOURCE),

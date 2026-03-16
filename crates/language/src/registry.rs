@@ -8,6 +8,20 @@ use {
 	std::{collections::BTreeMap, fmt, path::PathBuf},
 };
 
+/// Error returned when inserting a language whose [`LanguageId`] is already present.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicateLanguageIdError {
+	pub id: LanguageId,
+}
+
+impl fmt::Display for DuplicateLanguageIdError {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "duplicate language id: {}", self.id)
+	}
+}
+
+impl std::error::Error for DuplicateLanguageIdError {}
+
 /// Stable string identifier used by runtime registries and query bundles.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct LanguageId(String);
@@ -145,10 +159,24 @@ impl LanguageRegistry {
 		}
 	}
 
-	pub fn insert(&mut self, spec: LanguageSpec) {
+	/// Inserts `spec` if its [`LanguageId`] is not already present.
+	///
+	/// Returns [`DuplicateLanguageIdError`] instead of silently replacing an
+	/// existing language entry.
+	pub fn insert(&mut self, spec: LanguageSpec) -> Result<(), DuplicateLanguageIdError> {
+		if self.specs.contains_key(&spec.id) {
+			return Err(DuplicateLanguageIdError { id: spec.id });
+		}
 		self.specs.insert(spec.id.clone(), spec);
+		Ok(())
 	}
 
+	/// Replaces the entry with the same [`LanguageId`], returning the previous spec if any.
+	pub fn replace(&mut self, spec: LanguageSpec) -> Option<LanguageSpec> {
+		self.specs.insert(spec.id.clone(), spec)
+	}
+
+	/// Returns the registered spec for `id`.
 	pub fn language(&self, id: &LanguageId) -> Option<&LanguageSpec> {
 		self.specs.get(id)
 	}
@@ -158,6 +186,7 @@ impl LanguageRegistry {
 		self.specs.iter()
 	}
 
+	/// Loads the compiled grammar for `id`.
 	pub fn load_grammar(&self, id: &LanguageId) -> Result<Grammar, GrammarError> {
 		let spec = self
 			.language(id)
@@ -169,6 +198,7 @@ impl LanguageRegistry {
 		}
 	}
 
+	/// Loads and merges the available query files for `id`.
 	pub fn query_bundle(&self, id: &LanguageId) -> std::io::Result<QueryBundle> {
 		let spec = self
 			.language(id)
@@ -180,6 +210,7 @@ impl LanguageRegistry {
 		}
 	}
 
+	/// Reads `filename` for `id`, expanding `; inherits` directives.
 	pub fn read_query(&self, id: &LanguageId, filename: &str) -> Result<String, QueryReadError> {
 		let spec = self.language(id).ok_or_else(|| QueryReadError::RootNotFound {
 			language: id.to_string(),
@@ -192,6 +223,7 @@ impl LanguageRegistry {
 		}
 	}
 
+	/// Reads `filename` for `id` if it exists, expanding `; inherits` directives.
 	pub fn read_optional_query(&self, id: &LanguageId, filename: &str) -> Result<Option<String>, QueryReadError> {
 		let spec = self.language(id).ok_or_else(|| QueryReadError::RootNotFound {
 			language: id.to_string(),
@@ -239,5 +271,39 @@ mod tests {
 		assert_eq!(bundle.get("highlights"), Some("(identifier) @variable\n"));
 
 		fs::remove_dir_all(root).expect("temp root should be removed");
+	}
+
+	#[test]
+	fn insert_rejects_duplicate_language_ids() {
+		let mut registry = LanguageRegistry::new(GrammarLocator::default(), QueryLocator::default());
+		registry
+			.insert(LanguageSpec::new("rust", "tree-sitter-rust"))
+			.expect("first insert should succeed");
+		let error = registry
+			.insert(LanguageSpec::new("rust", "tree-sitter-rust"))
+			.expect_err("duplicate insert should fail");
+
+		assert_eq!(error.id, LanguageId::new("rust"));
+	}
+
+	#[test]
+	fn replace_swaps_existing_language_spec() {
+		let mut registry = LanguageRegistry::new(GrammarLocator::default(), QueryLocator::default());
+		registry
+			.insert(LanguageSpec::new("rust", "tree-sitter-rust"))
+			.expect("first insert should succeed");
+
+		let replaced = registry.replace(LanguageSpec::new("rust", "tree-sitter-rust-alt"));
+
+		assert_eq!(
+			replaced.map(|spec| spec.grammar_name),
+			Some("tree-sitter-rust".to_owned())
+		);
+		assert_eq!(
+			registry
+				.language(&LanguageId::new("rust"))
+				.map(|spec| spec.grammar_name.as_str()),
+			Some("tree-sitter-rust-alt")
+		);
 	}
 }

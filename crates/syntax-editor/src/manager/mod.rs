@@ -280,35 +280,64 @@ impl SyntaxManager {
 	}
 
 	/// Marks the document as needing a fresh parse.
+	///
+	/// Does nothing when `doc_id` is unknown.
 	pub fn mark_dirty(&mut self, doc_id: DocumentId) {
-		let slot = self.document_mut(doc_id);
-		slot.dirty = true;
+		if let Some(slot) = self.entries.get_mut(&doc_id) {
+			slot.dirty = true;
+		}
 	}
 
 	/// Returns and clears the per-document "updated" flag.
+	///
+	/// Returns `false` when `doc_id` is unknown.
 	pub fn take_updated(&mut self, doc_id: DocumentId) -> bool {
-		self.document_mut(doc_id).take_updated()
+		self.entries.get_mut(&doc_id).is_some_and(SyntaxSlot::take_updated)
 	}
 
+	/// Drops the installed full-document tree for `doc_id`.
+	///
+	/// Does nothing when `doc_id` is unknown.
 	pub fn drop_full(&mut self, doc_id: DocumentId) {
-		self.document_mut(doc_id).drop_full();
+		if let Some(slot) = self.entries.get_mut(&doc_id) {
+			slot.drop_full();
+		}
 	}
 
+	/// Drops all installed viewport trees for `doc_id`.
+	///
+	/// Does nothing when `doc_id` is unknown.
 	pub fn drop_viewports(&mut self, doc_id: DocumentId) {
-		self.document_mut(doc_id).drop_viewports();
+		if let Some(slot) = self.entries.get_mut(&doc_id) {
+			slot.drop_viewports();
+		}
 	}
 
+	/// Drops all installed trees for `doc_id`.
+	///
+	/// Does nothing when `doc_id` is unknown.
 	pub fn drop_all_trees(&mut self, doc_id: DocumentId) {
-		self.document_mut(doc_id).drop_all_trees();
+		if let Some(slot) = self.entries.get_mut(&doc_id) {
+			slot.drop_all_trees();
+		}
 	}
 
+	/// Caches the current full-document tree for later content-based restoration.
+	///
+	/// Does nothing when `doc_id` is unknown or has no full tree.
 	pub fn remember_full_tree_for_content(&mut self, doc_id: DocumentId, content: &Rope) {
-		self.document_mut(doc_id).remember_full_tree_for_content(content);
+		if let Some(slot) = self.entries.get_mut(&doc_id) {
+			slot.remember_full_tree_for_content(content);
+		}
 	}
 
+	/// Restores a cached full-document tree for `content` if one is available.
+	///
+	/// Returns `false` when `doc_id` is unknown or the content was not cached.
 	pub fn restore_full_tree_for_content(&mut self, doc_id: DocumentId, content: &Rope, doc_version: u64) -> bool {
-		self.document_mut(doc_id)
-			.restore_full_tree_for_content(content, doc_version)
+		self.entries
+			.get_mut(&doc_id)
+			.is_some_and(|slot| slot.restore_full_tree_for_content(content, doc_version))
 	}
 
 	/// Returns the manager-local change counter for `doc_id`.
@@ -316,18 +345,43 @@ impl SyntaxManager {
 		self.document(doc_id).map_or(0, |slot| slot.change_id)
 	}
 
+	/// Returns the installed full-document syntax tree for the document, if present.
+	pub fn full_syntax_for_doc(&self, doc_id: DocumentId) -> Option<&Syntax> {
+		self.document(doc_id)
+			.and_then(|slot| slot.full.as_ref().map(|full| &full.syntax))
+	}
+
 	/// Returns the best currently installed syntax tree for the document.
-	pub fn syntax_for_doc(&self, doc_id: DocumentId) -> Option<&Syntax> {
+	///
+	/// Unlike [`Self::full_syntax_for_doc`], this may return a viewport-local tree
+	/// and therefore `coverage: Some(..)`.
+	pub fn best_syntax_for_doc(&self, doc_id: DocumentId) -> Option<SyntaxSelection<'_>> {
 		let slot = self.document(doc_id)?;
 		if let Some(full) = slot.full.as_ref() {
-			return Some(&full.syntax);
+			return Some(SyntaxSelection {
+				syntax: &full.syntax,
+				tree_id: full.tree_id,
+				tree_doc_version: full.doc_version,
+				coverage: None,
+			});
 		}
-		slot.viewport_cache
-			.entries_mru()
-			.find_map(|entry| entry.stages().next().map(|(tree, _)| &tree.syntax))
+		slot.viewport_cache.entries_mru().find_map(|entry| {
+			// The first MRU stage is the best available partial fallback for doc-wide consumers.
+			entry.stages().next().map(|(tree, _)| SyntaxSelection {
+				syntax: &tree.syntax,
+				tree_id: tree.tree_id,
+				tree_doc_version: tree.doc_version,
+				coverage: Some(tree.coverage.clone()),
+			})
+		})
 	}
 
 	/// Selects the best installed syntax tree for a render viewport.
+	///
+	/// This API is render-oriented: if no installed tree overlaps `viewport`, it falls back
+	/// to the freshest available tree so drawing can continue while a better viewport parse
+	/// is still in flight. Callers must check the returned `coverage` before using the tree
+	/// for non-rendering features.
 	pub fn syntax_for_viewport(
 		&self, doc_id: DocumentId, doc_version: u64, viewport: Range<u32>,
 	) -> Option<SyntaxSelection<'_>> {

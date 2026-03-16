@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 	);
 	let mut rust = LanguageSpec::new(LanguageId::new("rust"), "tree-sitter-rust");
 	rust.injection_names.push("rs".to_owned());
-	registry.insert(rust);
+	registry.insert(rust)?;
 
 	let loader = RegistryLanguageLoader::from_registry(&registry)?;
 	let language = loader

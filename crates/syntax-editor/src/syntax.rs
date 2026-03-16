@@ -231,8 +231,7 @@ mod tests {
 	#[test]
 	fn partial_update_stays_partial() {
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader =
-			SingleLanguageLoader::from_queries(Language::new(0), grammar, "", "", "").expect("loader should build");
+		let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
 		let mut rope = Rope::from_str("fn alpha() {\n    alpha();\n}\n");
 		let start = 0u32;
 		let end = rope.len_bytes() as u32 - 2;
@@ -283,17 +282,16 @@ const AFTER: u32 = 2;
 "#;
 
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader =
-			SingleLanguageLoader::with_highlights(Language::new(0), grammar, HIGHLIGHT_QUERY, "", "", |name| {
-				Some(match name {
-					"identifier" => Highlight::new(1),
-					"type.builtin" => Highlight::new(2),
-					"string" => Highlight::new(3),
-					"number" => Highlight::new(4),
-					_ => return None,
-				})
+		let loader = SingleLanguageLoader::with_highlights(grammar, HIGHLIGHT_QUERY, "", "", |name| {
+			Some(match name {
+				"identifier" => Highlight::new(1),
+				"type.builtin" => Highlight::new(2),
+				"string" => Highlight::new(3),
+				"number" => Highlight::new(4),
+				_ => return None,
 			})
-			.expect("loader should build");
+		})
+		.expect("loader should build");
 		let rope = Rope::from_str(SOURCE);
 		let full = Syntax::new(rope.slice(..), loader.language(), &loader, SyntaxOptions::default())
 			.expect("full syntax should parse");

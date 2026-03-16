@@ -275,8 +275,7 @@ mod tests {
 
 	fn rust_session(src: &str) -> DocumentSession {
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
-			.expect("loader should build");
+		let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
 		DocumentSession::new(
 			loader.language(),
 			&StringText::new(src),
@@ -289,8 +288,7 @@ mod tests {
 	#[test]
 	fn apply_edits_updates_snapshot_text_and_revision() {
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
-			.expect("loader should build");
+		let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
 		let mut session = rust_session("fn alpha() {}\n");
 
 		let result = session
@@ -305,8 +303,7 @@ mod tests {
 	#[test]
 	fn oversized_edits_leave_session_unchanged() {
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
-			.expect("loader should build");
+		let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
 		let mut session = rust_session("fn alpha() {}\n");
 
 		let error = session
@@ -319,8 +316,7 @@ mod tests {
 	#[test]
 	fn noop_edits_do_not_advance_revision() {
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
-			.expect("loader should build");
+		let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
 		let mut session = rust_session("fn alpha() {}\n");
 
 		let result = session
@@ -336,8 +332,7 @@ mod tests {
 	#[test]
 	fn update_ranges_cover_old_and_new_extents() {
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
-			.expect("loader should build");
+		let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
 		let mut session = rust_session("fn alpha() {}\n");
 
 		let result = session
@@ -350,8 +345,7 @@ mod tests {
 	#[test]
 	fn multiple_non_overlapping_edits_parse_once_against_final_text() {
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
-			.expect("loader should build");
+		let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
 		let mut session = rust_session("fn alpha() {\n    beta();\n}\n");
 		let edits = ChangeSet::new([TextEdit::new(3..8, "gamma"), TextEdit::new(17..21, "delta")]);
 
@@ -367,8 +361,7 @@ mod tests {
 	#[test]
 	fn overlapping_edits_are_rejected() {
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
-			.expect("loader should build");
+		let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
 		let mut session = rust_session("fn alpha() {}\n");
 		let edits = ChangeSet::new([TextEdit::new(3..8, "beta"), TextEdit::new(5..8, "amma")]);
 
@@ -383,8 +376,7 @@ mod tests {
 	#[test]
 	fn timeout_returns_without_mutating_session() {
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
-			.expect("loader should build");
+		let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
 		let mut source = String::new();
 		for idx in 0..20_000 {
 			writeln!(&mut source, "fn value_{idx}() -> i32 {{ {idx} }}").expect("source should build");

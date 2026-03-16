@@ -1,13 +1,13 @@
 use {
 	glorp_syntax_tree::{
-		ChangeSet, DocumentSession, EngineConfig, Language, SingleLanguageLoader, StringText, tree_sitter::Grammar,
+		ChangeSet, DocumentSession, EngineConfig, SingleLanguageLoader, StringText, tree_sitter::Grammar,
 	},
 	std::error::Error,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
 	let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE)?;
-	let loader = SingleLanguageLoader::from_queries(Language::new(0), grammar, "", "", "")?;
+	let loader = SingleLanguageLoader::from_queries(grammar, "", "", "")?;
 	let mut session = DocumentSession::new(
 		loader.language(),
 		&StringText::new("fn alpha() -> i32 { 1 }\n"),

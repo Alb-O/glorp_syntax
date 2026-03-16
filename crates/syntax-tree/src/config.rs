@@ -48,45 +48,51 @@ pub struct SingleLanguageLoader {
 }
 
 impl SingleLanguageLoader {
-	pub fn new(language: Language, config: LanguageConfig) -> Self {
-		Self { language, config }
+	/// Builds a single-language loader for `config`.
+	///
+	/// The loader owns one engine [`Language`] token, available through
+	/// [`Self::language`].
+	pub fn new(config: LanguageConfig) -> Self {
+		Self {
+			language: Language::from_raw(0),
+			config,
+		}
 	}
 
+	/// Parses tree-sitter queries and builds a single-language loader.
 	pub fn from_queries(
-		language: Language, grammar: Grammar, highlight_query_text: &str, injection_query_text: &str,
-		local_query_text: &str,
+		grammar: Grammar, highlight_query_text: &str, injection_query_text: &str, local_query_text: &str,
 	) -> Result<Self, query::ParseError> {
 		let config = LanguageConfig::new(grammar, highlight_query_text, injection_query_text, local_query_text)?;
-		Ok(Self::new(language, config))
+		Ok(Self::new(config))
 	}
 
+	/// Parses queries, configures highlight names, and builds a single-language loader.
 	pub fn with_highlights(
-		language: Language, grammar: Grammar, highlight_query_text: &str, injection_query_text: &str,
-		local_query_text: &str, configure: impl FnMut(&str) -> Option<Highlight>,
+		grammar: Grammar, highlight_query_text: &str, injection_query_text: &str, local_query_text: &str,
+		configure: impl FnMut(&str) -> Option<Highlight>,
 	) -> Result<Self, query::ParseError> {
-		let loader = Self::from_queries(
-			language,
-			grammar,
-			highlight_query_text,
-			injection_query_text,
-			local_query_text,
-		)?;
+		let loader = Self::from_queries(grammar, highlight_query_text, injection_query_text, local_query_text)?;
 		loader.configure(configure);
 		Ok(loader)
 	}
 
+	/// Returns the loader-owned [`Language`] token for this loader.
 	pub fn language(&self) -> Language {
 		self.language
 	}
 
+	/// Returns the parsed grammar for this loader.
 	pub fn grammar(&self) -> Grammar {
 		self.config.grammar
 	}
 
+	/// Returns the parsed syntax configuration for this loader.
 	pub fn config(&self) -> &LanguageConfig {
 		&self.config
 	}
 
+	/// Configures highlight names after construction.
 	pub fn configure(&self, f: impl FnMut(&str) -> Option<Highlight>) {
 		self.config.configure(f);
 	}

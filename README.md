@@ -19,12 +19,12 @@ and structural query helpers.
 
 ```rust
 use glorp_syntax_tree::{
-    DocumentSession, EngineConfig, Language, SingleLanguageLoader, StringText,
+    DocumentSession, EngineConfig, SingleLanguageLoader, StringText,
     tree_sitter::Grammar,
 };
 
 let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE)?;
-let loader = SingleLanguageLoader::from_queries(Language::new(0), grammar, "", "", "")?;
+let loader = SingleLanguageLoader::from_queries(grammar, "", "", "")?;
 let session = DocumentSession::new(
     loader.language(),
     &StringText::new("fn answer() -> i32 { 42 }\n"),

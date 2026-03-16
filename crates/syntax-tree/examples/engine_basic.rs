@@ -1,7 +1,7 @@
 use {
 	glorp_syntax_tree::{
-		DocumentSession, EngineConfig, HighlightSpan, Language, SingleLanguageLoader, StringText,
-		highlighter::Highlight, tree_sitter::Grammar,
+		DocumentSession, EngineConfig, HighlightSpan, SingleLanguageLoader, StringText, highlighter::Highlight,
+		tree_sitter::Grammar,
 	},
 	std::error::Error,
 };
@@ -18,7 +18,7 @@ const HIGHLIGHTS: &str = r#"
 
 fn main() -> Result<(), Box<dyn Error>> {
 	let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE)?;
-	let loader = SingleLanguageLoader::with_highlights(Language::new(0), grammar, HIGHLIGHTS, "", "", |name| {
+	let loader = SingleLanguageLoader::with_highlights(grammar, HIGHLIGHTS, "", "", |name| {
 		Some(match name {
 			"function" => Highlight::new(1),
 			"number" => Highlight::new(2),

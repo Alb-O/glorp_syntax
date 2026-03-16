@@ -1,7 +1,7 @@
 use {
 	glorp_syntax_editor::{
-		DocumentId, Highlight, HighlightSpanQuery, HighlightTiles, Language, SealedSource, SingleLanguageLoader,
-		Syntax, SyntaxManager, SyntaxOptions, ViewportKey, tree_sitter::Grammar,
+		DocumentId, Highlight, HighlightSpanQuery, HighlightTiles, SealedSource, SingleLanguageLoader, Syntax,
+		SyntaxManager, SyntaxOptions, ViewportKey, tree_sitter::Grammar,
 	},
 	ropey::Rope,
 	std::error::Error,
@@ -27,7 +27,7 @@ const HIGHLIGHT_QUERY: &str = r#"
 
 fn main() -> Result<(), Box<dyn Error>> {
 	let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE)?;
-	let loader = SingleLanguageLoader::with_highlights(Language::new(0), grammar, HIGHLIGHT_QUERY, "", "", |name| {
+	let loader = SingleLanguageLoader::with_highlights(grammar, HIGHLIGHT_QUERY, "", "", |name| {
 		Some(match name {
 			"identifier" => Highlight::new(1),
 			"type" => Highlight::new(2),

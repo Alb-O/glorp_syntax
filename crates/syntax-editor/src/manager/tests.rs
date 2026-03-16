@@ -1,13 +1,12 @@
 use {
 	super::*,
-	crate::{Language, SingleLanguageLoader, Syntax, SyntaxOptions, tree_sitter::Grammar},
+	crate::{SingleLanguageLoader, Syntax, SyntaxOptions, tree_sitter::Grammar},
 	ropey::Rope,
 };
 
 fn rust_syntax(src: &str) -> Syntax {
 	let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-	let loader =
-		SingleLanguageLoader::from_queries(Language::new(0), grammar, "", "", "").expect("loader should build");
+	let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
 	let rope = Rope::from_str(src);
 	Syntax::new(rope.slice(..), loader.language(), &loader, SyntaxOptions::default()).expect("syntax should parse")
 }
@@ -23,17 +22,61 @@ fn candidate_score_prefers_exact_full_then_enriched() {
 }
 
 #[test]
-fn syntax_manager_tracks_updates_without_slot_access() {
+fn syntax_manager_tracks_updates_for_installed_documents() {
 	let mut manager = SyntaxManager::new();
 	let doc_id = DocumentId(17);
 
 	assert!(!manager.take_updated(doc_id));
+	assert!(!manager.has_syntax(doc_id));
 	manager.install_full(doc_id, rust_syntax("fn alpha() {}\n"), 1);
 	assert!(manager.take_updated(doc_id));
 	assert!(!manager.take_updated(doc_id));
 	manager.remember_full_tree_for_content(doc_id, &Rope::from_str("fn alpha() {}\n"));
 	assert!(manager.restore_full_tree_for_content(doc_id, &Rope::from_str("fn alpha() {}\n"), 2));
 	assert!(manager.take_updated(doc_id));
+}
+
+#[test]
+fn miss_paths_do_not_create_document_slots() {
+	let mut manager = SyntaxManager::new();
+	let doc_id = DocumentId(88);
+
+	manager.mark_dirty(doc_id);
+	assert!(!manager.take_updated(doc_id));
+	manager.drop_full(doc_id);
+	manager.drop_viewports(doc_id);
+	manager.drop_all_trees(doc_id);
+	manager.remember_full_tree_for_content(doc_id, &Rope::from_str("fn alpha() {}\n"));
+	assert!(!manager.restore_full_tree_for_content(doc_id, &Rope::from_str("fn alpha() {}\n"), 1));
+	assert!(!manager.has_syntax(doc_id));
+	assert_eq!(manager.syntax_version(doc_id), 0);
+	assert!(!manager.remove_document(doc_id));
+}
+
+#[test]
+fn full_and_best_document_selection_stay_distinct() {
+	let mut manager = SyntaxManager::new();
+	let doc_id = DocumentId(33);
+	let key = ViewportKey(5);
+	let viewport = rust_syntax("fn viewport() {}\n");
+
+	manager.install_viewport_stage_b(doc_id, key, viewport.clone(), 0..16, 2);
+
+	assert!(manager.full_syntax_for_doc(doc_id).is_none());
+	let selection = manager
+		.best_syntax_for_doc(doc_id)
+		.expect("best syntax should be available");
+	assert_eq!(selection.coverage, Some(0..16));
+
+	manager.install_full(doc_id, viewport, 3);
+	assert!(manager.full_syntax_for_doc(doc_id).is_some());
+	assert_eq!(
+		manager
+			.best_syntax_for_doc(doc_id)
+			.expect("full syntax should be selected")
+			.coverage,
+		None
+	);
 }
 
 #[test]

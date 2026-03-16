@@ -37,7 +37,7 @@ pub use {
 	},
 	loader::{RegistryLanguageLoader, RegistryLanguageLoaderError},
 	query::{QueryReadError, read_optional_query_from_paths, read_query_from_paths},
-	registry::{GrammarLocator, LanguageId, LanguageRegistry, LanguageSpec, QueryLocator},
+	registry::{DuplicateLanguageIdError, GrammarLocator, LanguageId, LanguageRegistry, LanguageSpec, QueryLocator},
 };
 #[cfg(feature = "default-runtime-paths")]
 pub use {

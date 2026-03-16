@@ -57,14 +57,21 @@ impl Layer {
 	}
 }
 
+/// Loader-scoped language token used by the engine.
+///
+/// Values of this type are produced by a [`LanguageLoader`] such as
+/// [`SingleLanguageLoader`] or `glorp_syntax_language::RegistryLanguageLoader`.
+/// They are not stable across unrelated loaders or process restarts.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Language(pub u32);
+pub struct Language(u32);
 
 impl Language {
-	pub fn new(idx: u32) -> Language {
+	#[doc(hidden)]
+	pub const fn from_raw(idx: u32) -> Language {
 		Language(idx)
 	}
 
+	/// Returns the loader-local numeric slot for this language token.
 	pub fn idx(self) -> usize {
 		self.0 as usize
 	}

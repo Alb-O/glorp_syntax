@@ -1,8 +1,6 @@
 use {
 	glorp_syntax_queries::TagQuery,
-	glorp_syntax_tree::{
-		DocumentSession, EngineConfig, Language, SingleLanguageLoader, StringText, tree_sitter::Grammar,
-	},
+	glorp_syntax_tree::{DocumentSession, EngineConfig, SingleLanguageLoader, StringText, tree_sitter::Grammar},
 	std::error::Error,
 };
 
@@ -17,7 +15,7 @@ const TAG_QUERY: &str = r#"
 
 fn main() -> Result<(), Box<dyn Error>> {
 	let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE)?;
-	let loader = SingleLanguageLoader::from_queries(Language::new(0), grammar, "", "", "")?;
+	let loader = SingleLanguageLoader::from_queries(grammar, "", "", "")?;
 	let session = DocumentSession::new(
 		loader.language(),
 		&StringText::new(SOURCE),

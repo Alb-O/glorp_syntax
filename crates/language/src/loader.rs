@@ -60,7 +60,7 @@ pub enum RegistryLanguageLoaderError {
 	Parse {
 		language: LanguageId,
 		#[source]
-		source: ParseError,
+		source: Box<ParseError>,
 	},
 	#[error("invalid {matcher_kind} regex for language {language}: {pattern}: {source}")]
 	InvalidRegex {
@@ -80,16 +80,21 @@ pub enum RegistryLanguageLoaderError {
 
 impl RegistryLanguageLoader {
 	/// Loads grammars, queries, and injection matchers for every registry entry.
+	///
+	/// The resulting [`Language`] values are scoped to this loader instance and
+	/// are assigned in the deterministic iteration order of the registry.
 	pub fn from_registry(registry: &LanguageRegistry) -> Result<Self, RegistryLanguageLoaderError> {
+		let language_count = registry.iter().size_hint().0;
 		let mut languages = Vec::new();
 		let mut languages_by_id = BTreeMap::new();
-		let mut exact_names = HashMap::new();
-		let mut content_regexes = Vec::new();
-		let mut filename_regexes = Vec::new();
-		let mut shebang_regexes = Vec::new();
+		let mut exact_names = HashMap::with_capacity(language_count);
+		let mut content_regexes = Vec::with_capacity(language_count);
+		let mut filename_regexes = Vec::with_capacity(language_count);
+		let mut shebang_regexes = Vec::with_capacity(language_count);
 
 		for (idx, (id, spec)) in registry.iter().enumerate() {
-			let language = Language::new(idx as u32);
+			// `Language` is a loader-local token, so deterministic registry order is enough.
+			let language = Language::from_raw(idx as u32);
 			languages_by_id.insert(id.clone(), language);
 
 			let grammar = registry
@@ -122,10 +127,11 @@ impl RegistryLanguageLoader {
 					source,
 				})?
 				.unwrap_or_default();
+			// Missing optional query files are treated as empty query sources.
 			let config = LanguageConfig::new(grammar, &highlights, &injections, &locals).map_err(|source| {
 				RegistryLanguageLoaderError::Parse {
 					language: id.clone(),
-					source,
+					source: Box::new(source),
 				}
 			})?;
 			languages.push(LoadedLanguage { id: id.clone(), config });
@@ -149,12 +155,12 @@ impl RegistryLanguageLoader {
 		})
 	}
 
-	/// Returns the numeric engine language ID for a registry language ID.
+	/// Returns the loader-scoped engine language ID for a registry language ID.
 	pub fn language(&self, id: &LanguageId) -> Option<Language> {
 		self.languages_by_id.get(id).copied()
 	}
 
-	/// Returns the registry language ID for a numeric engine language ID.
+	/// Returns the registry language ID for a loader-scoped engine language ID.
 	pub fn language_id(&self, language: Language) -> Option<&LanguageId> {
 		self.languages.get(language.idx()).map(|loaded| &loaded.id)
 	}
@@ -233,6 +239,7 @@ mod tests {
 	use {super::*, glorp_syntax_tree::tree_sitter::Grammar, ropey::Rope};
 
 	fn loader() -> RegistryLanguageLoader {
+		let language = Language::from_raw(0);
 		let config = LanguageConfig::new(
 			Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load"),
 			"",
@@ -245,33 +252,33 @@ mod tests {
 				id: LanguageId::new("rust"),
 				config,
 			}],
-			languages_by_id: BTreeMap::from([(LanguageId::new("rust"), Language::new(0))]),
+			languages_by_id: BTreeMap::from([(LanguageId::new("rust"), language)]),
 			exact_names: HashMap::from([
 				(
 					Box::<str>::from("rust"),
 					ExactNameMatcher {
-						language: Language::new(0),
+						language,
 						owner: LanguageId::new("rust"),
 					},
 				),
 				(
 					Box::<str>::from("rs"),
 					ExactNameMatcher {
-						language: Language::new(0),
+						language,
 						owner: LanguageId::new("rust"),
 					},
 				),
 			]),
 			content_regexes: vec![RegexMatcher {
-				language: Language::new(0),
+				language,
 				regex: Regex::new("rust|rs").expect("regex should compile"),
 			}],
 			filename_regexes: vec![RegexMatcher {
-				language: Language::new(0),
+				language,
 				regex: Regex::new("\\.rs$").expect("regex should compile"),
 			}],
 			shebang_regexes: vec![RegexMatcher {
-				language: Language::new(0),
+				language,
 				regex: Regex::new("cargo").expect("regex should compile"),
 			}],
 		}
@@ -280,29 +287,27 @@ mod tests {
 	#[test]
 	fn registry_loader_matches_exact_and_regex_markers() {
 		let loader = loader();
+		let language = Language::from_raw(0);
 		let fence = Rope::from_str("```rust");
 		let filename = Rope::from_str("main.rs");
 		let shebang = Rope::from_str("#!/usr/bin/env cargo");
-		assert_eq!(loader.language(&LanguageId::new("rust")), Some(Language::new(0)));
-		assert_eq!(
-			loader.language_id(Language::new(0)).map(LanguageId::as_str),
-			Some("rust")
-		);
+		assert_eq!(loader.language(&LanguageId::new("rust")), Some(language));
+		assert_eq!(loader.language_id(language).map(LanguageId::as_str), Some("rust"));
 		assert_eq!(
 			loader.language_for_marker(InjectionLanguageMarker::Name("rs")),
-			Some(Language::new(0))
+			Some(language)
 		);
 		assert_eq!(
 			loader.language_for_marker(InjectionLanguageMarker::Match(fence.slice(..))),
-			Some(Language::new(0))
+			Some(language)
 		);
 		assert_eq!(
 			loader.language_for_marker(InjectionLanguageMarker::Filename(filename.slice(..))),
-			Some(Language::new(0))
+			Some(language)
 		);
 		assert_eq!(
 			loader.language_for_marker(InjectionLanguageMarker::Shebang(shebang.slice(..))),
-			Some(Language::new(0))
+			Some(language)
 		);
 	}
 }

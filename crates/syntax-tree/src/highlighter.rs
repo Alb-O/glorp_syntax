@@ -642,7 +642,7 @@ impl<'a, T: LanguageLoader> QueryLoader<'a> for HighlightQueryLoader<&'a T> {
 mod tests {
 	use {
 		super::*,
-		crate::{DocumentSession, EngineConfig, Language, SingleLanguageLoader, StringText, tree_sitter::Grammar},
+		crate::{DocumentSession, EngineConfig, SingleLanguageLoader, StringText, tree_sitter::Grammar},
 	};
 
 	#[test]
@@ -654,7 +654,7 @@ mod tests {
 "#;
 
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader = SingleLanguageLoader::with_highlights(Language::new(0), grammar, QUERY, "", "", |name| {
+		let loader = SingleLanguageLoader::with_highlights(grammar, QUERY, "", "", |name| {
 			Some(match name {
 				"function" => Highlight::new(1),
 				"function.builtin" => Highlight::new(2),
@@ -700,21 +700,14 @@ mod tests {
 "#;
 
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-		let loader = SingleLanguageLoader::with_highlights(
-			Language::new(0),
-			grammar,
-			HIGHLIGHT_QUERY,
-			"",
-			LOCAL_QUERY,
-			|name| {
-				Some(match name {
-					"callee" => Highlight::new(1),
-					"number" => Highlight::new(2),
-					"var" => Highlight::new(3),
-					_ => return None,
-				})
-			},
-		)
+		let loader = SingleLanguageLoader::with_highlights(grammar, HIGHLIGHT_QUERY, "", LOCAL_QUERY, |name| {
+			Some(match name {
+				"callee" => Highlight::new(1),
+				"number" => Highlight::new(2),
+				"var" => Highlight::new(3),
+				_ => return None,
+			})
+		})
 		.expect("loader should build");
 		let session = DocumentSession::new(
 			loader.language(),
