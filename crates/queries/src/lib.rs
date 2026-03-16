@@ -226,18 +226,18 @@ mod tests {
 		std::error::Error,
 	};
 
-	const SOURCE: &str = r#"fn alpha() {}
+	const SOURCE: &str = r"fn alpha() {}
 
 fn beta(arg: i32) -> i32 {
     alpha();
     arg + 1
 }
-"#;
+";
 
-	const TAG_QUERY: &str = r#"
+	const TAG_QUERY: &str = r"
 (function_item
   name: (identifier) @name) @definition.function
-"#;
+";
 
 	const RAINBOW_QUERY: &str = r#"
 [

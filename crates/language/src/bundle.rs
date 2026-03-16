@@ -146,17 +146,9 @@ fn collect_query_kinds(language: &LanguageId, roots: &[PathBuf]) -> Result<BTree
 		if !lang_dir.is_dir() {
 			continue;
 		}
-		let read_dir = fs::read_dir(&lang_dir).map_err(|source| QueryBundleError::Io {
-			language: language.clone(),
-			path: lang_dir.clone(),
-			source,
-		})?;
+		let read_dir = fs::read_dir(&lang_dir).map_err(|source| query_dir_io_error(language, &lang_dir, source))?;
 		for entry in read_dir {
-			let entry = entry.map_err(|source| QueryBundleError::Io {
-				language: language.clone(),
-				path: lang_dir.clone(),
-				source,
-			})?;
+			let entry = entry.map_err(|source| query_dir_io_error(language, &lang_dir, source))?;
 			let path = entry.path();
 			if path.extension().and_then(|ext| ext.to_str()) != Some("scm") {
 				continue;
@@ -175,16 +167,20 @@ fn collect_query_kinds(language: &LanguageId, roots: &[PathBuf]) -> Result<BTree
 }
 
 fn collect_raw_files_sorted(dir: &Path, extension: &str) -> std::io::Result<Vec<PathBuf>> {
-	let mut files = Vec::new();
-	for entry in fs::read_dir(dir)? {
-		let entry = entry?;
-		let path = entry.path();
-		if path.extension().and_then(|ext| ext.to_str()) == Some(extension) {
-			files.push(path);
-		}
-	}
-	files.sort();
+	let mut files = fs::read_dir(dir)?
+		.map(|entry| entry.map(|entry| entry.path()))
+		.collect::<Result<Vec<_>, _>>()?;
+	files.retain(|path| path.extension().and_then(|ext| ext.to_str()) == Some(extension));
+	files.sort_unstable();
 	Ok(files)
+}
+
+fn query_dir_io_error(language: &LanguageId, path: &Path, source: std::io::Error) -> QueryBundleError {
+	QueryBundleError::Io {
+		language: language.clone(),
+		path: path.to_path_buf(),
+		source,
+	}
 }
 
 #[cfg(test)]

@@ -229,12 +229,11 @@ impl SyntaxSlot {
 		let Some(full) = self.full.as_ref() else {
 			return;
 		};
-		match self.full_tree_memory_pos(content, compatibility_key) {
-			Some(0) => return,
-			Some(pos) => {
-				self.full_tree_memory.remove(pos);
+		if let Some(pos) = self.full_tree_memory_pos(content, compatibility_key) {
+			if pos == 0 {
+				return;
 			}
-			None => {}
+			self.full_tree_memory.remove(pos);
 		}
 		if self.full_tree_memory.len() >= FULL_TREE_MEMORY_CAP {
 			self.full_tree_memory.pop_back();
@@ -281,6 +280,12 @@ impl SyntaxManager {
 		self.entries.entry(doc_id).or_default()
 	}
 
+	fn with_slot_mut(&mut self, doc_id: DocumentId, f: impl FnOnce(&mut SyntaxSlot)) {
+		if let Some(slot) = self.entries.get_mut(&doc_id) {
+			f(slot);
+		}
+	}
+
 	/// Removes all syntax state for `doc_id`.
 	pub fn remove_document(&mut self, doc_id: DocumentId) -> bool {
 		self.entries.remove(&doc_id).is_some()
@@ -300,9 +305,7 @@ impl SyntaxManager {
 	///
 	/// Does nothing when `doc_id` is unknown.
 	pub fn mark_dirty(&mut self, doc_id: DocumentId) {
-		if let Some(slot) = self.entries.get_mut(&doc_id) {
-			slot.dirty = true;
-		}
+		self.with_slot_mut(doc_id, |slot| slot.dirty = true);
 	}
 
 	/// Returns and clears the per-document "updated" flag.
@@ -316,27 +319,21 @@ impl SyntaxManager {
 	///
 	/// Does nothing when `doc_id` is unknown.
 	pub fn drop_full(&mut self, doc_id: DocumentId) {
-		if let Some(slot) = self.entries.get_mut(&doc_id) {
-			slot.drop_full();
-		}
+		self.with_slot_mut(doc_id, SyntaxSlot::drop_full);
 	}
 
 	/// Drops all installed viewport trees for `doc_id`.
 	///
 	/// Does nothing when `doc_id` is unknown.
 	pub fn drop_viewports(&mut self, doc_id: DocumentId) {
-		if let Some(slot) = self.entries.get_mut(&doc_id) {
-			slot.drop_viewports();
-		}
+		self.with_slot_mut(doc_id, SyntaxSlot::drop_viewports);
 	}
 
 	/// Drops all installed trees for `doc_id`.
 	///
 	/// Does nothing when `doc_id` is unknown.
 	pub fn drop_all_trees(&mut self, doc_id: DocumentId) {
-		if let Some(slot) = self.entries.get_mut(&doc_id) {
-			slot.drop_all_trees();
-		}
+		self.with_slot_mut(doc_id, SyntaxSlot::drop_all_trees);
 	}
 
 	/// Caches the current full-document tree for later content-based restoration.
@@ -347,9 +344,9 @@ impl SyntaxManager {
 	/// Typical callers use an editor-owned token derived from grammar mode and
 	/// runtime/query configuration.
 	pub fn remember_full_tree_for_content(&mut self, doc_id: DocumentId, content: &Rope, compatibility_key: u64) {
-		if let Some(slot) = self.entries.get_mut(&doc_id) {
-			slot.remember_full_tree_for_content(content, compatibility_key);
-		}
+		self.with_slot_mut(doc_id, |slot| {
+			slot.remember_full_tree_for_content(content, compatibility_key)
+		});
 	}
 
 	/// Restores a cached full-document tree for `content` if one is available.

@@ -432,7 +432,7 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 					// that the ordering invariant remains satisfied.
 					cmp::Ordering::Less => {
 						if let Some(highlight) = highlight {
-							self.active_highlights.insert(idx, highlight)
+							self.active_highlights.insert(idx, highlight);
 						}
 					}
 					// By definition of our `rposition` predicate:
@@ -653,10 +653,10 @@ mod tests {
 	#[test]
 	fn later_capture_wins_for_same_range() {
 		const SOURCE: &str = "fn answer() {}\n";
-		const QUERY: &str = r#"
+		const QUERY: &str = r"
 (identifier) @function
 (identifier) @function.builtin
-"#;
+";
 
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
 		let loader = SingleLanguageLoader::with_highlights(grammar, QUERY, "", "", |name| {
@@ -686,23 +686,23 @@ mod tests {
 
 	#[test]
 	fn non_local_predicate_does_not_drop_sibling_captures() {
-		const SOURCE: &str = r#"fn demo() {
+		const SOURCE: &str = r"fn demo() {
     let local = 0;
     local(1);
 }
-"#;
-		const HIGHLIGHT_QUERY: &str = r#"
+";
+		const HIGHLIGHT_QUERY: &str = r"
 (call_expression
   function: (identifier) @callee
   arguments: (arguments (integer_literal) @number)
   (#is-not? local))
-"#;
-		const LOCAL_QUERY: &str = r#"
+";
+		const LOCAL_QUERY: &str = r"
 (block) @local.scope
 (let_declaration
   pattern: (identifier) @local.definition.var)
 (identifier) @local.reference
-"#;
+";
 
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
 		let loader = SingleLanguageLoader::with_highlights(grammar, HIGHLIGHT_QUERY, "", LOCAL_QUERY, |name| {

@@ -88,6 +88,22 @@ impl LanguageSpec {
 			shebang_regexes: Vec::new(),
 		}
 	}
+
+	fn grammar_paths_or_default<'a>(&'a self, default: &'a GrammarLocator) -> &'a [PathBuf] {
+		if self.grammar_paths.is_empty() {
+			default.search_paths()
+		} else {
+			&self.grammar_paths
+		}
+	}
+
+	fn query_roots_or_default<'a>(&'a self, default: &'a QueryLocator) -> &'a [PathBuf] {
+		if self.query_roots.is_empty() {
+			default.roots()
+		} else {
+			&self.query_roots
+		}
+	}
 }
 
 /// Grammar search helper shared by runtime registries.
@@ -206,11 +222,10 @@ impl LanguageRegistry {
 		let spec = self
 			.language(id)
 			.ok_or_else(|| GrammarError::NotFound(id.to_string()))?;
-		if spec.grammar_paths.is_empty() {
-			self.default_grammar_locator.load(&spec.grammar_name)
-		} else {
-			load_grammar_from_paths(&spec.grammar_name, &spec.grammar_paths)
-		}
+		load_grammar_from_paths(
+			&spec.grammar_name,
+			spec.grammar_paths_or_default(&self.default_grammar_locator),
+		)
 	}
 
 	/// Loads and merges the available resolved query files for `id`.
@@ -220,11 +235,7 @@ impl LanguageRegistry {
 		let spec = self
 			.language(id)
 			.ok_or_else(|| QueryBundleError::LanguageNotFound { language: id.clone() })?;
-		if spec.query_roots.is_empty() {
-			self.default_query_locator.bundle(id)
-		} else {
-			load_query_bundle(id.as_str(), &spec.query_roots)
-		}
+		load_query_bundle(id.as_str(), spec.query_roots_or_default(&self.default_query_locator))
 	}
 
 	/// Loads and merges the available raw query files for `id` without resolving `; inherits`.
@@ -235,11 +246,7 @@ impl LanguageRegistry {
 		let spec = self
 			.language(id)
 			.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("language not found: {id}")))?;
-		if spec.query_roots.is_empty() {
-			self.default_query_locator.raw_bundle(id)
-		} else {
-			load_raw_query_bundle(id.as_str(), &spec.query_roots)
-		}
+		load_raw_query_bundle(id.as_str(), spec.query_roots_or_default(&self.default_query_locator))
 	}
 
 	/// Reads `filename` for `id`, expanding `; inherits` directives.
@@ -248,11 +255,11 @@ impl LanguageRegistry {
 			language: id.to_string(),
 			filename: filename.to_owned(),
 		})?;
-		if spec.query_roots.is_empty() {
-			self.default_query_locator.read_query(id, filename)
-		} else {
-			read_query_from_paths(id.as_str(), filename, &spec.query_roots)
-		}
+		read_query_from_paths(
+			id.as_str(),
+			filename,
+			spec.query_roots_or_default(&self.default_query_locator),
+		)
 	}
 
 	/// Reads `filename` for `id` if it exists, expanding `; inherits` directives.
@@ -261,11 +268,11 @@ impl LanguageRegistry {
 			language: id.to_string(),
 			filename: filename.to_owned(),
 		})?;
-		if spec.query_roots.is_empty() {
-			self.default_query_locator.read_optional_query(id, filename)
-		} else {
-			read_optional_query_from_paths(id.as_str(), filename, &spec.query_roots)
-		}
+		read_optional_query_from_paths(
+			id.as_str(),
+			filename,
+			spec.query_roots_or_default(&self.default_query_locator),
+		)
 	}
 }
 

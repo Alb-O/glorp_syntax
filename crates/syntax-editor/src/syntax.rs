@@ -280,12 +280,10 @@ impl RenderSyntax {
 				// Viewport trees are deliberately render-only: after edits we remap the old document
 				// coverage, reseal that window against the new source, and rebuild from scratch.
 				let coverage = remap_viewport_range(viewport.coverage(), edits);
-				let sealed = Arc::new(SealedSource::from_byte_range_with_newline_padding(
-					source,
-					coverage.clone(),
-				));
+				let base_offset = coverage.start;
+				let sealed = Arc::new(SealedSource::from_byte_range_with_newline_padding(source, coverage));
 				self.core.rebuild(sealed.slice(), loader, opts)?;
-				*viewport = ViewportMetadata::new(coverage.start, sealed);
+				*viewport = ViewportMetadata::new(base_offset, sealed);
 				Ok(())
 			}
 		}
@@ -450,12 +448,12 @@ mod tests {
     value + 1
 }
 "#;
-		const HIGHLIGHT_QUERY: &str = r#"
+		const HIGHLIGHT_QUERY: &str = r"
 (identifier) @identifier
 (primitive_type) @type.builtin
 (string_literal) @string
 (integer_literal) @number
-"#;
+";
 
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
 		let loader = SingleLanguageLoader::with_highlights(grammar, HIGHLIGHT_QUERY, "", "", |name| {
@@ -533,12 +531,12 @@ fn middle(value: i32) -> i32 {
 
 const AFTER: u32 = 2;
 "#;
-		const HIGHLIGHT_QUERY: &str = r#"
+		const HIGHLIGHT_QUERY: &str = r"
 (identifier) @identifier
 (primitive_type) @type.builtin
 (string_literal) @string
 (integer_literal) @number
-"#;
+";
 
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
 		let loader = SingleLanguageLoader::with_highlights(grammar, HIGHLIGHT_QUERY, "", "", |name| {

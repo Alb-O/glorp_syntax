@@ -127,9 +127,7 @@ impl<S> HighlightTiles<S> {
 		};
 		let mut removed = vec![false; self.tiles.len()];
 		for idx in indices.into_values() {
-			if let Some(slot) = removed.get_mut(idx) {
-				*slot = true;
-			}
+			removed[idx] = true;
 		}
 		self.compact_tiles(&removed);
 	}
@@ -150,11 +148,7 @@ impl<S> HighlightTiles<S> {
 		}
 
 		let start_byte = line_to_byte_or_eof(q.rope, q.start_line);
-		let end_byte = if q.end_line < q.rope.len_lines() {
-			q.rope.line_to_byte(q.end_line) as u32
-		} else {
-			q.rope.len_bytes() as u32
-		};
+		let end_byte = line_to_byte_or_eof(q.rope, q.end_line);
 
 		let start_tile = q.start_line / TILE_SIZE;
 		let end_tile = (q.end_line.saturating_sub(1)) / TILE_SIZE;
@@ -322,11 +316,7 @@ where
 	S: Copy, {
 	let rope_len_bytes = rope.len_bytes() as u32;
 	let tile_start_byte = line_to_byte_or_eof(rope, start_line);
-	let tile_end_byte = if end_line < rope.len_lines() {
-		rope.line_to_byte(end_line) as u32
-	} else {
-		rope_len_bytes
-	};
+	let tile_end_byte = line_to_byte_or_eof(rope, end_line);
 
 	let syntax = selection.syntax();
 	if syntax.root_end_byte() > rope_len_bytes {

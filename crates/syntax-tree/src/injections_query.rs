@@ -870,6 +870,10 @@ fn ranges_intersect(a: &Range, b: &Range) -> bool {
 }
 
 #[cfg(test)]
+#[allow(
+	clippy::single_range_in_vec_init,
+	reason = "planner fixtures intentionally model one emitted range"
+)]
 mod tests {
 	use {
 		super::*,
@@ -960,7 +964,7 @@ mod tests {
 			scope: None,
 			last_match: true,
 			matched_node_range: 10..16,
-			emitted_ranges: vec![10..16],
+			emitted_ranges: Vec::from([10..16]),
 		}];
 
 		let plan = syntax.plan_injections(candidates, old_injections, &[]);
@@ -994,7 +998,7 @@ mod tests {
 				scope: None,
 				last_match: true,
 				matched_node_range: 20..24,
-				emitted_ranges: vec![20..24],
+				emitted_ranges: Vec::from([20..24]),
 			},
 			InjectionCandidate {
 				language,
@@ -1002,7 +1006,7 @@ mod tests {
 				scope: None,
 				last_match: true,
 				matched_node_range: 4..8,
-				emitted_ranges: vec![4..8],
+				emitted_ranges: Vec::from([4..8]),
 			},
 		];
 
