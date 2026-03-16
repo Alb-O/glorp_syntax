@@ -154,7 +154,7 @@ where
 		let root_range = syntax.tree().root_node().byte_range();
 		// create fake injection for query root
 		let injection = Injection {
-			range: root_range.clone(),
+			range: root_range.start..root_range.end,
 			layer: syntax.root,
 			matched_node_range: root_range,
 		};
@@ -286,8 +286,9 @@ where
 				(Some(_) | None, Some(_)) => {
 					// consume injection
 					let injection = self.current_layer.injections.next().unwrap().clone();
-					self.enter_injection(injection.clone());
-					return Some(QueryIterEvent::EnterInjection(injection));
+					let event = QueryIterEvent::EnterInjection(injection.clone());
+					self.enter_injection(injection);
+					return Some(event);
 				}
 			}
 		}

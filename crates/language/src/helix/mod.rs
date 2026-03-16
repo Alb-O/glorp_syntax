@@ -113,7 +113,8 @@ fn clone_sparse_helix_queries(checkout_dir: &Path, lock: &HelixRuntimeLock) -> R
 }
 
 fn run_git(dir: &Path, args: &[&str]) -> Result<(), HelixQueryError> {
-	run_git_capture(dir, args).map(|_| ())
+	run_git_capture(dir, args)?;
+	Ok(())
 }
 
 fn run_git_capture(dir: &Path, args: &[&str]) -> Result<String, HelixQueryError> {

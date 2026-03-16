@@ -165,7 +165,9 @@ pub fn build_grammar(grammar: &GrammarConfig) -> Result<BuildStatus> {
 fn ensure_git_available() -> Result<()> {
 	Command::new("git")
 		.arg("--version")
-		.output()
+		.stdout(Stdio::null())
+		.stderr(Stdio::null())
+		.status()
 		.map_err(|_| GrammarBuildError::GitNotAvailable)?;
 	Ok(())
 }
@@ -204,13 +206,17 @@ fn clone_fresh(grammar_dir: &Path, grammar_id: &str, remote: &str, revision: &st
 }
 
 fn git_rev_parse(dir: &Path) -> Result<String> {
+	run_git_capture(dir, &["rev-parse", "HEAD"]).map(|output| output.trim_end().to_owned())
+}
+
+fn run_git_capture(dir: &Path, args: &[&str]) -> Result<String> {
 	let output = Command::new("git")
-		.args(["rev-parse", "HEAD"])
+		.args(args)
 		.current_dir(dir)
 		.output()
 		.map_err(|error| GrammarBuildError::GitCommand(error.to_string()))?;
 	if output.status.success() {
-		Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+		Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 	} else {
 		Err(GrammarBuildError::GitCommand(
 			String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -246,18 +252,8 @@ fn git_clone(remote: &str, dest: &Path) -> Result<()> {
 }
 
 fn run_git(dir: &Path, args: &[&str]) -> Result<()> {
-	let output = Command::new("git")
-		.args(args)
-		.current_dir(dir)
-		.output()
-		.map_err(|error| GrammarBuildError::GitCommand(error.to_string()))?;
-	if output.status.success() {
-		Ok(())
-	} else {
-		Err(GrammarBuildError::GitCommand(
-			String::from_utf8_lossy(&output.stderr).into_owned(),
-		))
-	}
+	run_git_capture(dir, args)?;
+	Ok(())
 }
 
 fn find_compiler<'a>(candidates: &[&'a str]) -> Option<&'a str> {

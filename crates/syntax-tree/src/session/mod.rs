@@ -160,19 +160,18 @@ fn validated_char_range(text: &Rope, range: &std::ops::Range<u32>) -> Result<(us
 		return Err(Error::InvalidRanges);
 	}
 
-	Ok((
-		text.try_byte_to_char(range.start as usize)
-			.map_err(|_| Error::InvalidRanges)?,
-		text.try_byte_to_char(range.end as usize)
-			.map_err(|_| Error::InvalidRanges)?,
-	))
+	Ok((byte_to_char(text, range.start)?, byte_to_char(text, range.end)?))
+}
+
+fn byte_to_char(text: &Rope, byte: u32) -> Result<usize, Error> {
+	text.try_byte_to_char(byte as usize).map_err(|_| Error::InvalidRanges)
 }
 
 fn normalize_edits(text: &Rope, edits: &ChangeSet) -> Result<Vec<NormalizedEdit>, Error> {
 	let mut normalized = Vec::with_capacity(edits.iter().size_hint().0);
 	for edit in edits.iter() {
 		let (start_char, end_char) = validated_char_range(text, &edit.range)?;
-		if !byte_range_eq(text, edit.range.clone(), &edit.replacement) {
+		if !byte_range_eq(text, &edit.range, &edit.replacement) {
 			normalized.push(NormalizedEdit {
 				text: edit.clone(),
 				start_char,
@@ -191,7 +190,7 @@ fn normalize_edits(text: &Rope, edits: &ChangeSet) -> Result<Vec<NormalizedEdit>
 	Ok(normalized)
 }
 
-fn byte_range_eq(text: &Rope, range: std::ops::Range<u32>, expected: &str) -> bool {
+fn byte_range_eq(text: &Rope, range: &std::ops::Range<u32>, expected: &str) -> bool {
 	let slice = text.byte_slice(range.start as usize..range.end as usize);
 	slice.len_bytes() == expected.len()
 		&& slice

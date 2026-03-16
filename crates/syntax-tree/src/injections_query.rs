@@ -452,22 +452,23 @@ impl Syntax {
 				&mut old_injections,
 				&mut retired_layers,
 			);
-			let layer_action = match candidate.scope.clone() {
+			let layer_action = match candidate.scope.as_ref() {
 				// Combined injections share one child layer across multiple disjoint content ranges.
 				Some(scope @ InjectionScope::Match { .. }) if candidate.last_match => combined_layers
-					.remove(&scope)
+					.remove(scope)
 					.unwrap_or_else(|| push_layer_action(&mut layer_actions, &candidate, reused.as_ref())),
 				Some(scope) => *combined_layers
-					.entry(scope)
+					.entry(scope.clone())
 					.or_insert_with(|| push_layer_action(&mut layer_actions, &candidate, reused.as_ref())),
 				None => push_layer_action(&mut layer_actions, &candidate, reused.as_ref()),
 			};
 
 			layer_actions[layer_action].apply_candidate(&candidate, reused.as_ref());
-			for range in &candidate.emitted_ranges {
+			let matched_node_range = candidate.matched_node_range.clone();
+			for range in candidate.emitted_ranges {
 				injections.push(PlannedInjection {
-					range: range.clone(),
-					matched_node_range: candidate.matched_node_range.clone(),
+					range,
+					matched_node_range: matched_node_range.clone(),
 					layer_action,
 				});
 			}
@@ -708,8 +709,11 @@ fn map_old_injection<'a>(
 	old_injection: Injection, language: Language, pattern: Option<Pattern>,
 	edits: &mut Peekable<impl Iterator<Item = &'a tree_sitter::InputEdit>>, offset: &mut i32,
 ) -> MappedOldInjection {
-	let mut range = old_injection.range.clone();
-	let mut matched_node_range = old_injection.matched_node_range.clone();
+	let Injection {
+		layer,
+		mut range,
+		mut matched_node_range,
+	} = old_injection;
 	let mut modified = false;
 
 	debug_assert!(matched_node_range.start <= range.start);
@@ -763,7 +767,7 @@ fn map_old_injection<'a>(
 	matched_node_range = mapped_node_start..mapped_node_end;
 
 	MappedOldInjection {
-		layer: old_injection.layer,
+		layer,
 		range,
 		matched_node_range,
 		language,
