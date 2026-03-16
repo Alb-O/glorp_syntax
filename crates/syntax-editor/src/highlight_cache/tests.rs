@@ -62,6 +62,41 @@ fn lru_eviction_reuses_slots() {
 }
 
 #[test]
+fn replacing_same_tile_reuses_slot() {
+	let mut cache = HighlightTiles::<u8>::with_capacity(3);
+	cache.insert_tile(
+		DocumentId(1),
+		0,
+		HighlightTile {
+			key: HighlightKey {
+				syntax_version: 1,
+				theme_epoch: 0,
+				tile_idx: 0,
+			},
+			spans: Vec::new(),
+		},
+	);
+
+	cache.insert_tile(
+		DocumentId(1),
+		0,
+		HighlightTile {
+			key: HighlightKey {
+				syntax_version: 2,
+				theme_epoch: 0,
+				tile_idx: 0,
+			},
+			spans: Vec::new(),
+		},
+	);
+
+	assert_eq!(cache.tiles.len(), 1);
+	assert_eq!(cache.mru_order.len(), 1);
+	assert_eq!(cache.tiles[0].key.syntax_version, 2);
+	assert_eq!(cache.index.get(&DocumentId(1)).and_then(|doc| doc.get(&0)), Some(&0));
+}
+
+#[test]
 fn invalidate_document_reclaims_dead_tile_slots() {
 	let mut cache = HighlightTiles::<u8>::with_capacity(3);
 	for tile_idx in 0..2 {

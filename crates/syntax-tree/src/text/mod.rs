@@ -1,5 +1,5 @@
 use {
-	ropey::{Rope, RopeSlice},
+	ropey::{Rope, RopeBuilder, RopeSlice},
 	std::ops::Range,
 };
 
@@ -39,11 +39,11 @@ impl RopeText {
 	}
 
 	pub fn from_slice(slice: RopeSlice<'_>) -> Self {
-		let mut rope = Rope::new();
+		let mut rope = RopeBuilder::new();
 		for chunk in slice.chunks() {
-			rope.append(Rope::from(chunk));
+			rope.append(chunk);
 		}
-		Self { rope }
+		Self { rope: rope.finish() }
 	}
 }
 

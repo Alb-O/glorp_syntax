@@ -86,31 +86,35 @@ impl DocumentSession {
 		if edits.is_empty() {
 			return Ok(self.unchanged_result());
 		}
-		let normalized = normalize_edits(self.text.as_ref(), edits)?;
+		let original_text = self.text.as_ref();
+		let normalized = normalize_edits(original_text, edits)?;
 		if normalized.is_empty() {
 			return Ok(self.unchanged_result());
 		}
 
-		let mut text = self.text.as_ref().clone();
+		let input_edits: Vec<_> = normalized
+			.iter()
+			.map(|edit| build_input_edit(original_text, edit))
+			.collect();
+		let mut text = original_text.clone();
 		let mut syntax = self.syntax.as_ref().clone();
 		let changed_ranges = coalesce_ranges(normalized.iter().map(invalidated_range).collect());
 
-		for edit in &normalized {
-			let input_edit = build_input_edit(&text, edit);
+		for edit in normalized.iter().rev() {
 			apply_edit(&mut text, edit)?;
-			if let Err(error) = syntax.update(text.slice(..), self.config.parse_timeout, &[input_edit], loader) {
-				return match error {
-					Error::Timeout => Ok(UpdateResult {
-						revision: self.revision,
-						snapshot_id: self.snapshot_id,
-						changed_ranges,
-						timed_out: true,
-						snapshot_changed: false,
-						affected_layers: self.syntax.layer_count(),
-					}),
-					other => Err(other),
-				};
-			}
+		}
+		if let Err(error) = syntax.update(text.slice(..), self.config.parse_timeout, &input_edits, loader) {
+			return match error {
+				Error::Timeout => Ok(UpdateResult {
+					revision: self.revision,
+					snapshot_id: self.snapshot_id,
+					changed_ranges,
+					timed_out: true,
+					snapshot_changed: false,
+					affected_layers: self.syntax.layer_count(),
+				}),
+				other => Err(other),
+			};
 		}
 
 		self.text = Arc::new(text);
@@ -174,6 +178,13 @@ fn normalize_edits(text: &Rope, edits: &ChangeSet) -> Result<Vec<TextEdit>, Erro
 			normalized.push(edit.clone());
 		}
 	}
+	normalized.sort_by_key(|edit| edit.range.start);
+	if normalized
+		.windows(2)
+		.any(|pair| pair[0].range.end > pair[1].range.start)
+	{
+		return Err(Error::InvalidRanges);
+	}
 	Ok(normalized)
 }
 
@@ -210,14 +221,15 @@ fn build_input_edit(text: &Rope, edit: &TextEdit) -> InputEdit {
 	let start_byte = edit.range.start;
 	let old_end_byte = edit.range.end;
 	let new_end_byte = start_byte + edit.replacement.len() as u32;
+	let start_point = point_for_byte(text, start_byte);
 
 	InputEdit {
 		start_byte,
 		old_end_byte,
 		new_end_byte,
-		start_point: point_for_byte(text, start_byte),
+		start_point,
 		old_end_point: point_for_byte(text, old_end_byte),
-		new_end_point: point_after_insert(point_for_byte(text, start_byte), &edit.replacement),
+		new_end_point: point_after_insert(start_point, &edit.replacement),
 	}
 }
 
@@ -333,6 +345,39 @@ mod tests {
 			.expect("edit should apply");
 
 		assert_eq!(result.changed_ranges, vec![3..13]);
+	}
+
+	#[test]
+	fn multiple_non_overlapping_edits_parse_once_against_final_text() {
+		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
+		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
+			.expect("loader should build");
+		let mut session = rust_session("fn alpha() {\n    beta();\n}\n");
+		let edits = ChangeSet::new([TextEdit::new(3..8, "gamma"), TextEdit::new(17..21, "delta")]);
+
+		let result = session.apply_edits(&edits, &loader).expect("edits should apply");
+
+		assert!(result.snapshot_changed);
+		assert_eq!(result.revision, Revision(1));
+		assert_eq!(session.snapshot().byte_text(0..28), "fn gamma() {\n    delta();\n}\n");
+		assert!(session.snapshot().named_node_at(3, 8).is_some());
+		assert!(session.snapshot().named_node_at(17, 22).is_some());
+	}
+
+	#[test]
+	fn overlapping_edits_are_rejected() {
+		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
+		let loader = SingleLanguageLoader::from_queries(crate::Language::new(0), grammar, "", "", "")
+			.expect("loader should build");
+		let mut session = rust_session("fn alpha() {}\n");
+		let edits = ChangeSet::new([TextEdit::new(3..8, "beta"), TextEdit::new(5..8, "amma")]);
+
+		let error = session
+			.apply_edits(&edits, &loader)
+			.expect_err("overlapping edits should fail");
+
+		assert_eq!(error, Error::InvalidRanges);
+		assert_eq!(session.snapshot().byte_text(0..14), "fn alpha() {}\n");
 	}
 
 	#[test]

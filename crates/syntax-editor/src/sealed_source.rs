@@ -1,5 +1,5 @@
 use {
-	ropey::{Rope, RopeSlice},
+	ropey::{Rope, RopeBuilder, RopeSlice},
 	std::ops::Range,
 };
 
@@ -12,14 +12,15 @@ pub struct SealedSource {
 
 impl SealedSource {
 	pub fn from_window(window: RopeSlice<'_>, suffix: &str) -> Self {
-		let mut rope = Rope::new();
+		let mut rope = RopeBuilder::new();
 		for chunk in window.chunks() {
-			rope.append(Rope::from(chunk));
+			rope.append(chunk);
 		}
-		let real_len_bytes = rope.len_bytes() as u32;
+		let real_len_bytes = window.len_bytes() as u32;
 		if !suffix.is_empty() {
-			rope.append(Rope::from(suffix));
+			rope.append(suffix);
 		}
+		let rope = rope.finish();
 		let suffix_len_bytes = (rope.len_bytes() as u32) - real_len_bytes;
 
 		Self {

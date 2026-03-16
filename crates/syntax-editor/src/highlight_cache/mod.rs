@@ -188,6 +188,13 @@ impl<S> HighlightTiles<S> {
 	}
 
 	fn insert_tile(&mut self, doc_id: DocumentId, tile_idx: usize, tile: HighlightTile<S>) -> usize {
+		if let Some(existing_idx) = self.take_tile_index(doc_id, tile_idx) {
+			self.tiles[existing_idx] = tile;
+			self.touch(existing_idx);
+			self.index.entry(doc_id).or_default().insert(tile_idx, existing_idx);
+			return existing_idx;
+		}
+
 		if self.tiles.len() == self.max_tiles
 			&& let Some(evicted_idx) = self.mru_order.pop_back()
 		{
@@ -205,6 +212,17 @@ impl<S> HighlightTiles<S> {
 		self.tiles.push(tile);
 		self.mru_order.push_front(idx);
 		self.index.entry(doc_id).or_default().insert(tile_idx, idx);
+		idx
+	}
+
+	fn take_tile_index(&mut self, doc_id: DocumentId, tile_idx: usize) -> Option<usize> {
+		let idx = self
+			.index
+			.get_mut(&doc_id)
+			.and_then(|doc_tiles| doc_tiles.remove(&tile_idx));
+		if self.index.get(&doc_id).is_some_and(HashMap::is_empty) {
+			self.index.remove(&doc_id);
+		}
 		idx
 	}
 
