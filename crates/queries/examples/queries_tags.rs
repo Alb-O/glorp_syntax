@@ -16,13 +16,13 @@ const TAG_QUERY: &str = r#"
 fn main() -> Result<(), Box<dyn Error>> {
 	let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE)?;
 	let loader = SingleLanguageLoader::from_queries(grammar, "", "", "")?;
-	let session = DocumentSession::new(
+	let snapshot = DocumentSession::new(
 		loader.language(),
 		&StringText::new(SOURCE),
 		&loader,
 		EngineConfig::default(),
-	)?;
-	let snapshot = session.snapshot();
+	)?
+	.snapshot();
 	let query = TagQuery::new(loader.grammar(), TAG_QUERY)?;
 	let tags: Vec<_> = query
 		.capture_nodes("name", &snapshot)

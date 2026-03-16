@@ -18,9 +18,7 @@ impl SealedSource {
 		}
 		let real_len_bytes = window.len_bytes() as u32;
 		let suffix_len_bytes = suffix.len() as u32;
-		if !suffix.is_empty() {
-			rope.append(suffix);
-		}
+		rope.append(suffix);
 
 		Self {
 			rope: rope.finish(),

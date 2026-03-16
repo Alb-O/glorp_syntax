@@ -11,12 +11,10 @@ pub struct TreeCursor<'tree> {
 
 impl<'tree> TreeCursor<'tree> {
 	pub(crate) fn new(syntax: &'tree Syntax) -> Self {
-		let cursor = syntax.tree().walk();
-
 		Self {
 			syntax,
 			current: syntax.root,
-			cursor,
+			cursor: syntax.tree().walk(),
 		}
 	}
 
@@ -29,20 +27,16 @@ impl<'tree> TreeCursor<'tree> {
 			return true;
 		}
 
-		loop {
+		while let Some(parent) = self.syntax.layer(self.current).parent {
 			// Ascend to the parent layer if one exists.
-			let Some(parent) = self.syntax.layer(self.current).parent else {
-				return false;
-			};
-
 			self.current = parent;
 			if let Some(tree) = self.syntax.layer(self.current).tree() {
 				self.cursor = tree.walk();
-				break;
+				return true;
 			}
 		}
 
-		true
+		false
 	}
 
 	pub fn goto_parent_with<P>(&mut self, predicate: P) -> bool
@@ -102,9 +96,10 @@ impl<'tree> TreeCursor<'tree> {
 	/// Returns an iterator over the children of the node the TreeCursor is on
 	/// at the time this is called.
 	pub fn children<'a>(&'a mut self) -> ChildIter<'a, 'tree> {
-		let parent = self.node();
-
-		ChildIter { cursor: self, parent }
+		ChildIter {
+			parent: self.node(),
+			cursor: self,
+		}
 	}
 }
 

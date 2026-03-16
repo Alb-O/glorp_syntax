@@ -8,10 +8,23 @@ pub use glorp_syntax_tree::read_query;
 use glorp_syntax_tree::{
 	DocumentSnapshot,
 	tree_sitter::{
-		Grammar, Node, Query,
+		Capture, Grammar, Node, Query,
 		query::{InvalidPredicateError, UserPredicate},
 	},
 };
+
+fn capture_groups<'a>(
+	query: &'a Query, capture: Capture, snapshot: &'a DocumentSnapshot,
+) -> impl Iterator<Item = Vec<Node<'a>>> + 'a {
+	let root = snapshot.root_node();
+	snapshot.capture_matches(query, capture, &root)
+}
+
+fn capture_nodes<'a>(
+	query: &'a Query, capture: Capture, snapshot: &'a DocumentSnapshot,
+) -> impl Iterator<Item = Node<'a>> + 'a {
+	capture_groups(query, capture, snapshot).flatten()
+}
 
 /// Query for computing indentation.
 #[derive(Debug)]
@@ -66,11 +79,8 @@ impl TextObjectQuery {
 	pub fn capture_nodes<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
-		let capture = self.query.get_capture(capture_name)?;
-		let root = snapshot.root_node();
 		Some(
-			snapshot
-				.capture_matches(&self.query, capture, &root)
+			capture_groups(&self.query, self.query.get_capture(capture_name)?, snapshot)
 				.filter_map(CapturedNode::from_nodes),
 		)
 	}
@@ -80,12 +90,7 @@ impl TextObjectQuery {
 		&'a self, capture_names: &[&str], snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
 		let capture = capture_names.iter().find_map(|name| self.query.get_capture(name))?;
-		let root = snapshot.root_node();
-		Some(
-			snapshot
-				.capture_matches(&self.query, capture, &root)
-				.filter_map(CapturedNode::from_nodes),
-		)
+		Some(capture_groups(&self.query, capture, snapshot).filter_map(CapturedNode::from_nodes))
 	}
 }
 
@@ -152,13 +157,11 @@ impl TagQuery {
 	pub fn capture_nodes<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
-		let capture = self.query.get_capture(capture_name)?;
-		let root = snapshot.root_node();
-		Some(
-			snapshot
-				.capture_matches(&self.query, capture, &root)
-				.flat_map(|nodes| nodes.into_iter()),
-		)
+		Some(capture_nodes(
+			&self.query,
+			self.query.get_capture(capture_name)?,
+			snapshot,
+		))
 	}
 }
 
@@ -197,35 +200,21 @@ impl RainbowQuery {
 	pub fn capture_nodes<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
-		let capture = self.query.get_capture(capture_name)?;
-		let root = snapshot.root_node();
-		Some(
-			snapshot
-				.capture_matches(&self.query, capture, &root)
-				.flat_map(|nodes| nodes.into_iter()),
-		)
+		Some(capture_nodes(
+			&self.query,
+			self.query.get_capture(capture_name)?,
+			snapshot,
+		))
 	}
 
 	/// Streams nodes captured as rainbow brackets.
 	pub fn bracket_nodes<'a>(&'a self, snapshot: &'a DocumentSnapshot) -> Option<impl Iterator<Item = Node<'a>>> {
-		let capture = self.bracket_capture?;
-		let root = snapshot.root_node();
-		Some(
-			snapshot
-				.capture_matches(&self.query, capture, &root)
-				.flat_map(|nodes| nodes.into_iter()),
-		)
+		Some(capture_nodes(&self.query, self.bracket_capture?, snapshot))
 	}
 
 	/// Streams nodes captured as rainbow scopes.
 	pub fn scope_nodes<'a>(&'a self, snapshot: &'a DocumentSnapshot) -> Option<impl Iterator<Item = Node<'a>>> {
-		let capture = self.scope_capture?;
-		let root = snapshot.root_node();
-		Some(
-			snapshot
-				.capture_matches(&self.query, capture, &root)
-				.flat_map(|nodes| nodes.into_iter()),
-		)
+		Some(capture_nodes(&self.query, self.scope_capture?, snapshot))
 	}
 }
 

@@ -111,14 +111,7 @@ impl DocumentSession {
 		}
 		if let Err(error) = syntax.update(text.slice(..), self.config.parse_timeout, &input_edits, loader) {
 			return match error {
-				Error::Timeout => Ok(UpdateResult {
-					revision: self.revision,
-					snapshot_id: self.snapshot_id,
-					changed_ranges,
-					timed_out: true,
-					snapshot_changed: false,
-					affected_layers: self.syntax.layer_count(),
-				}),
+				Error::Timeout => Ok(self.update_result(changed_ranges, true, false)),
 				other => Err(other),
 			};
 		}
@@ -129,23 +122,22 @@ impl DocumentSession {
 		self.snapshot_id = SnapshotId(self.snapshot_id.0.wrapping_add(1));
 		self.generation = self.generation.wrapping_add(1);
 
-		Ok(UpdateResult {
-			revision: self.revision,
-			snapshot_id: self.snapshot_id,
-			changed_ranges,
-			timed_out: false,
-			snapshot_changed: true,
-			affected_layers: self.syntax.layer_count(),
-		})
+		Ok(self.update_result(changed_ranges, false, true))
 	}
 
 	fn unchanged_result(&self) -> UpdateResult {
+		self.update_result(Vec::new(), false, false)
+	}
+
+	fn update_result(
+		&self, changed_ranges: Vec<std::ops::Range<u32>>, timed_out: bool, snapshot_changed: bool,
+	) -> UpdateResult {
 		UpdateResult {
 			revision: self.revision,
 			snapshot_id: self.snapshot_id,
-			changed_ranges: Vec::new(),
-			timed_out: false,
-			snapshot_changed: false,
+			changed_ranges,
+			timed_out,
+			snapshot_changed,
 			affected_layers: self.syntax.layer_count(),
 		}
 	}

@@ -25,13 +25,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 			_ => return None,
 		})
 	})?;
-	let session = DocumentSession::new(
+	let snapshot = DocumentSession::new(
 		loader.language(),
 		&StringText::new(SOURCE),
 		&loader,
 		EngineConfig::default(),
-	)?;
-	let snapshot = session.snapshot();
+	)?
+	.snapshot();
 
 	let spans: Vec<HighlightSpan> = snapshot.highlight_spans(&loader, ..).collect();
 	assert!(

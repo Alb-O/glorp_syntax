@@ -41,22 +41,19 @@ pub fn read_query_from_paths(lang: &str, filename: &str, roots: &[PathBuf]) -> R
 pub fn read_optional_query_from_paths(
 	lang: &str, filename: &str, roots: &[PathBuf],
 ) -> Result<Option<String>, QueryReadError> {
-	resolve_inherits(lang, |query_lang| read_query_text(roots, query_lang, filename))
-		.map(Some)
-		.or_else(|error| {
-			match error {
-				// A missing root file means "this optional query kind is absent", but the same
-				// condition for an inherited file is a real configuration error.
-				ResolveQueryError::Read {
-					language,
-					source: QueryFileError::NotFound { filename: _, .. },
-				} if language.as_ref() == lang => Ok(None),
-				ResolveQueryError::Read { source, .. } => Err(source.into_query_error(lang)),
-				ResolveQueryError::Cycle { chain } => Err(QueryReadError::InheritCycle {
-					chain: chain.into_iter().map(Into::into).collect(),
-				}),
-			}
-		})
+	match resolve_inherits(lang, |query_lang| read_query_text(roots, query_lang, filename)) {
+		Ok(query) => Ok(Some(query)),
+		// A missing root file means "this optional query kind is absent", but the same
+		// condition for an inherited file is a real configuration error.
+		Err(ResolveQueryError::Read {
+			language,
+			source: QueryFileError::NotFound { .. },
+		}) if language.as_ref() == lang => Ok(None),
+		Err(ResolveQueryError::Read { source, .. }) => Err(source.into_query_error(lang)),
+		Err(ResolveQueryError::Cycle { chain }) => Err(QueryReadError::InheritCycle {
+			chain: chain.into_iter().map(Into::into).collect(),
+		}),
+	}
 }
 
 #[derive(Debug)]

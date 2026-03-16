@@ -77,10 +77,9 @@ pub fn get_grammar_src_dir(grammar: &GrammarConfig) -> PathBuf {
 		GrammarSource::Local { path } => PathBuf::from(path).join("src"),
 		GrammarSource::Git { subpath, .. } => {
 			let base = grammar_sources_dir().join(&grammar.grammar_id);
-			match subpath {
-				Some(subpath) => base.join(subpath).join("src"),
-				None => base.join("src"),
-			}
+			subpath
+				.as_deref()
+				.map_or_else(|| base.join("src"), |subpath| base.join(subpath).join("src"))
 		}
 	}
 }

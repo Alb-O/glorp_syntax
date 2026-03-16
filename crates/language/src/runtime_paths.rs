@@ -7,11 +7,10 @@ fn push_unique(dirs: &mut Vec<PathBuf>, path: PathBuf) {
 }
 
 pub fn runtime_dir() -> PathBuf {
-	if let Ok(runtime) = std::env::var("GLORP_SYNTAX_RUNTIME") {
-		return PathBuf::from(runtime);
-	}
-
-	data_local_dir().map_or_else(|| PathBuf::from("."), |dir| dir.join("glorp_syntax"))
+	std::env::var("GLORP_SYNTAX_RUNTIME").map_or_else(
+		|_| data_local_dir().map_or_else(|| PathBuf::from("."), |dir| dir.join("glorp_syntax")),
+		PathBuf::from,
+	)
 }
 
 pub fn cache_dir() -> Option<PathBuf> {

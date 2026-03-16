@@ -43,13 +43,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let language = loader
 		.language_for_filename("main.rs")
 		.expect("filename matcher should resolve rust");
-	let session = DocumentSession::new(
+	let snapshot = DocumentSession::new(
 		language,
 		&StringText::new("fn answer() -> i32 { 42 }\n"),
 		&loader,
 		EngineConfig::default(),
-	)?;
-	let snapshot = session.snapshot();
+	)?
+	.snapshot();
 	assert!(snapshot.named_node_at(3, 9).is_some());
 
 	println!(

@@ -321,14 +321,6 @@ where
 	Resolve: Fn(Highlight) -> S,
 	S: Copy, {
 	let rope_len_bytes = rope.len_bytes() as u32;
-	let root_end_byte = match selection {
-		RenderSyntaxSelection::Full { syntax, .. } => syntax.root_end_byte(),
-		RenderSyntaxSelection::Viewport { syntax, .. } => syntax.root_end_byte(),
-	};
-	if root_end_byte > rope_len_bytes {
-		return Vec::new();
-	}
-
 	let tile_start_byte = line_to_byte_or_eof(rope, start_line);
 	let tile_end_byte = if end_line < rope.len_lines() {
 		rope.line_to_byte(end_line) as u32
@@ -337,10 +329,16 @@ where
 	};
 
 	let spans = match selection {
-		RenderSyntaxSelection::Full { syntax, .. } => syntax.highlight_spans(loader, tile_start_byte..tile_end_byte),
-		RenderSyntaxSelection::Viewport { syntax, .. } => {
+		RenderSyntaxSelection::Full { syntax, .. } if syntax.root_end_byte() <= rope_len_bytes => {
 			syntax.highlight_spans(loader, tile_start_byte..tile_end_byte)
 		}
+		RenderSyntaxSelection::Viewport { syntax, .. } => {
+			if syntax.root_end_byte() > rope_len_bytes {
+				return Vec::new();
+			}
+			syntax.highlight_spans(loader, tile_start_byte..tile_end_byte)
+		}
+		RenderSyntaxSelection::Full { .. } => return Vec::new(),
 	};
 
 	spans
