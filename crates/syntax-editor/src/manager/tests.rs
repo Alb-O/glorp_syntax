@@ -1,14 +1,36 @@
 use {
 	super::*,
-	crate::{SingleLanguageLoader, Syntax, SyntaxOptions, tree_sitter::Grammar},
+	crate::{SealedSource, SingleLanguageLoader, Syntax, SyntaxOptions, ViewportSyntax, tree_sitter::Grammar},
 	ropey::Rope,
+	std::sync::Arc,
 };
 
-fn rust_syntax(src: &str) -> Syntax {
+fn loader() -> SingleLanguageLoader {
 	let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
-	let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
+	SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build")
+}
+
+fn rust_syntax(src: &str) -> Syntax {
+	let loader = loader();
 	let rope = Rope::from_str(src);
 	Syntax::new(rope.slice(..), loader.language(), &loader, SyntaxOptions::default()).expect("syntax should parse")
+}
+
+fn rust_viewport_syntax(src: &str, coverage: Range<u32>) -> ViewportSyntax {
+	let loader = loader();
+	let rope = Rope::from_str(src);
+	let sealed = Arc::new(SealedSource::from_byte_range_with_newline_padding(
+		rope.slice(..),
+		coverage.clone(),
+	));
+	ViewportSyntax::new(
+		sealed,
+		loader.language(),
+		&loader,
+		SyntaxOptions::default(),
+		coverage.start,
+	)
+	.expect("viewport syntax should parse")
 }
 
 #[test]
@@ -54,29 +76,33 @@ fn miss_paths_do_not_create_document_slots() {
 }
 
 #[test]
-fn full_and_best_document_selection_stay_distinct() {
+fn full_document_selection_never_falls_back_to_viewport_tree() {
 	let mut manager = SyntaxManager::new();
 	let doc_id = DocumentId(33);
 	let key = ViewportKey(5);
-	let viewport = rust_syntax("fn viewport() {}\n");
+	let viewport = rust_viewport_syntax("fn viewport() {}\n", 0..16);
 
-	manager.install_viewport_stage_b(doc_id, key, viewport.clone(), 0..16, 2);
+	manager.install_viewport_stage_b(doc_id, key, viewport, 0..16, 2);
 
 	assert!(manager.full_syntax_for_doc(doc_id).is_none());
-	let selection = manager
-		.best_syntax_for_doc(doc_id)
-		.expect("best syntax should be available");
-	assert_eq!(selection.coverage, Some(0..16));
 
-	manager.install_full(doc_id, viewport, 3);
+	manager.install_full(doc_id, rust_syntax("fn viewport() {}\n"), 3);
 	assert!(manager.full_syntax_for_doc(doc_id).is_some());
-	assert_eq!(
-		manager
-			.best_syntax_for_doc(doc_id)
-			.expect("full syntax should be selected")
-			.coverage,
-		None
-	);
+}
+
+#[test]
+fn render_selection_reports_viewport_coverage_explicitly() {
+	let mut manager = SyntaxManager::new();
+	let doc_id = DocumentId(34);
+	let key = ViewportKey(8);
+
+	manager.install_viewport_stage_b(doc_id, key, rust_viewport_syntax("fn viewport() {}\n", 0..16), 0..16, 2);
+
+	let selection = manager
+		.syntax_for_viewport(doc_id, 2, 0..16)
+		.expect("viewport selection should exist");
+	assert_eq!(selection.coverage(), Some(0..16));
+	assert!(matches!(selection, RenderSyntaxSelection::Viewport { .. }));
 }
 
 #[test]
@@ -84,8 +110,8 @@ fn stale_viewport_installs_are_ignored() {
 	let mut manager = SyntaxManager::new();
 	let doc_id = DocumentId(1);
 	let key = ViewportKey(9);
-	let fresh = rust_syntax("fn fresh() {}\n");
-	let stale = rust_syntax("fn stale() {}\n");
+	let fresh = rust_viewport_syntax("fn fresh() {}\n", 0..12);
+	let stale = rust_viewport_syntax("fn stale() {}\n", 0..12);
 
 	let change_id = manager.install_viewport_stage_b(doc_id, key, fresh, 0..12, 3);
 	let returned = manager.install_viewport_stage_a(doc_id, key, stale, 0..12, 2);
@@ -105,7 +131,7 @@ fn stale_viewports_do_not_reappear_after_newer_full_tree() {
 	let doc_id = DocumentId(2);
 	let key = ViewportKey(3);
 	let full = rust_syntax("fn full() {}\n");
-	let stale = rust_syntax("fn stale() {}\n");
+	let stale = rust_viewport_syntax("fn stale() {}\n", 0..11);
 
 	let change_id = manager.install_full(doc_id, full, 5);
 	let returned = manager.install_viewport_stage_b(doc_id, key, stale, 0..11, 4);

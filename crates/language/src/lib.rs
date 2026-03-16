@@ -35,7 +35,7 @@ pub use {
 		GrammarError, GrammarSource as LoadedGrammarSource, load_grammar_from_path, load_grammar_from_paths,
 		locate_grammar_library,
 	},
-	loader::{RegistryLanguageLoader, RegistryLanguageLoaderError},
+	loader::{RegistryLanguageLoadReport, RegistryLanguageLoader, RegistryLanguageLoaderError},
 	query::{QueryReadError, read_optional_query_from_paths, read_query_from_paths},
 	registry::{DuplicateLanguageIdError, GrammarLocator, LanguageId, LanguageRegistry, LanguageSpec, QueryLocator},
 };

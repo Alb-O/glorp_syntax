@@ -33,11 +33,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 		GrammarLocator::new(grammar_search_paths()),
 		QueryLocator::new([query_root.clone()]),
 	);
-	let mut rust = LanguageSpec::new(LanguageId::new("rust"), "tree-sitter-rust");
+	let mut rust = LanguageSpec::new(LanguageId::new("rust"), "rust");
 	rust.injection_names.push("rs".to_owned());
 	registry.insert(rust)?;
 
-	let loader = RegistryLanguageLoader::from_registry(&registry)?;
+	let report = RegistryLanguageLoader::from_registry_tolerant(&registry);
+	assert!(report.issues.is_empty(), "example registry should load cleanly");
+	let loader = report.loader;
 	let language = loader
 		.language(&LanguageId::new("rust"))
 		.expect("registered language should map to a numeric id");

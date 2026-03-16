@@ -1,5 +1,5 @@
 use {
-	crate::Syntax,
+	crate::{Syntax, ViewportSyntax},
 	ropey::Rope,
 	std::{
 		collections::{HashMap, VecDeque},
@@ -25,8 +25,8 @@ struct InstalledSyntax {
 }
 
 #[derive(Debug, Clone)]
-struct ViewportSyntax {
-	syntax: Syntax,
+struct InstalledViewportSyntax {
+	syntax: ViewportSyntax,
 	doc_version: u64,
 	tree_id: u64,
 	coverage: Range<u32>,
@@ -34,12 +34,12 @@ struct ViewportSyntax {
 
 #[derive(Debug, Default, Clone)]
 struct ViewportEntry {
-	stage_a: Option<ViewportSyntax>,
-	stage_b: Option<ViewportSyntax>,
+	stage_a: Option<InstalledViewportSyntax>,
+	stage_b: Option<InstalledViewportSyntax>,
 }
 
 impl ViewportEntry {
-	fn stages(&self) -> impl Iterator<Item = (&ViewportSyntax, bool)> + '_ {
+	fn stages(&self) -> impl Iterator<Item = (&InstalledViewportSyntax, bool)> + '_ {
 		self.stage_b
 			.iter()
 			.map(|tree| (tree, true))
@@ -121,6 +121,75 @@ impl ViewportCache {
 	pub fn best_doc_version(&self) -> Option<u64> {
 		self.map.values().filter_map(ViewportEntry::best_doc_version).max()
 	}
+
+	fn promote(&mut self, key: ViewportKey) -> bool {
+		if self.order.front() == Some(&key) {
+			return true;
+		}
+		let Some(pos) = self.order.iter().position(|entry| *entry == key) else {
+			return false;
+		};
+		self.order.remove(pos);
+		self.order.push_front(key);
+		true
+	}
+}
+
+/// Best syntax tree selected for viewport rendering.
+#[derive(Debug, Clone)]
+pub enum RenderSyntaxSelection<'a> {
+	/// A full-document tree aligned to document byte offsets.
+	Full {
+		/// Selected full-document syntax tree.
+		syntax: &'a Syntax,
+		/// Monotonic tree identifier assigned by [`SyntaxManager`].
+		tree_id: u64,
+		/// Document version associated with the selected tree.
+		tree_doc_version: u64,
+	},
+	/// A viewport-local tree suitable for rendering fallback.
+	Viewport {
+		/// Selected viewport syntax tree.
+		syntax: &'a ViewportSyntax,
+		/// Monotonic tree identifier assigned by [`SyntaxManager`].
+		tree_id: u64,
+		/// Document version associated with the selected tree.
+		tree_doc_version: u64,
+		/// Covered byte range in full-document coordinates.
+		coverage: Range<u32>,
+	},
+}
+
+impl<'a> RenderSyntaxSelection<'a> {
+	/// Returns the selected tree's monotonic manager-local identifier.
+	pub fn tree_id(&self) -> u64 {
+		match self {
+			Self::Full { tree_id, .. } | Self::Viewport { tree_id, .. } => *tree_id,
+		}
+	}
+
+	/// Returns the document version associated with the selected tree.
+	pub fn tree_doc_version(&self) -> u64 {
+		match self {
+			Self::Full { tree_doc_version, .. } | Self::Viewport { tree_doc_version, .. } => *tree_doc_version,
+		}
+	}
+
+	/// Returns the selected viewport coverage in document byte coordinates.
+	///
+	/// Full-document selections return `None`.
+	pub fn coverage(&self) -> Option<Range<u32>> {
+		match self {
+			Self::Full { .. } => None,
+			Self::Viewport { coverage, .. } => Some(coverage.clone()),
+		}
+	}
+}
+
+/// Per-document syntax registry with full-tree and viewport-tree selection.
+#[derive(Debug, Default, Clone)]
+pub struct SyntaxManager {
+	entries: HashMap<DocumentId, SyntaxSlot>,
 }
 
 /// Per-document syntax state.
@@ -216,38 +285,6 @@ impl SyntaxSlot {
 		self.change_id = self.change_id.wrapping_add(1);
 		true
 	}
-}
-
-impl ViewportCache {
-	fn promote(&mut self, key: ViewportKey) -> bool {
-		if self.order.front() == Some(&key) {
-			return true;
-		}
-		let Some(pos) = self.order.iter().position(|entry| *entry == key) else {
-			return false;
-		};
-		self.order.remove(pos);
-		self.order.push_front(key);
-		true
-	}
-}
-
-/// Best syntax tree selected for a render viewport.
-pub struct SyntaxSelection<'a> {
-	/// Syntax tree chosen for the requested viewport.
-	pub syntax: &'a Syntax,
-	/// Monotonic tree identifier assigned by [`SyntaxManager`].
-	pub tree_id: u64,
-	/// Document version associated with the selected tree.
-	pub tree_doc_version: u64,
-	/// Covered byte range for viewport-local trees. `None` for full-document trees.
-	pub coverage: Option<Range<u32>>,
-}
-
-#[derive(Debug, Default, Clone)]
-/// Per-document syntax registry with full-tree and viewport-tree selection.
-pub struct SyntaxManager {
-	entries: HashMap<DocumentId, SyntaxSlot>,
 }
 
 impl SyntaxManager {
@@ -351,40 +388,13 @@ impl SyntaxManager {
 			.and_then(|slot| slot.full.as_ref().map(|full| &full.syntax))
 	}
 
-	/// Returns the best currently installed syntax tree for the document.
-	///
-	/// Unlike [`Self::full_syntax_for_doc`], this may return a viewport-local tree
-	/// and therefore `coverage: Some(..)`.
-	pub fn best_syntax_for_doc(&self, doc_id: DocumentId) -> Option<SyntaxSelection<'_>> {
-		let slot = self.document(doc_id)?;
-		if let Some(full) = slot.full.as_ref() {
-			return Some(SyntaxSelection {
-				syntax: &full.syntax,
-				tree_id: full.tree_id,
-				tree_doc_version: full.doc_version,
-				coverage: None,
-			});
-		}
-		slot.viewport_cache.entries_mru().find_map(|entry| {
-			// The first MRU stage is the best available partial fallback for doc-wide consumers.
-			entry.stages().next().map(|(tree, _)| SyntaxSelection {
-				syntax: &tree.syntax,
-				tree_id: tree.tree_id,
-				tree_doc_version: tree.doc_version,
-				coverage: Some(tree.coverage.clone()),
-			})
-		})
-	}
-
 	/// Selects the best installed syntax tree for a render viewport.
 	///
-	/// This API is render-oriented: if no installed tree overlaps `viewport`, it falls back
-	/// to the freshest available tree so drawing can continue while a better viewport parse
-	/// is still in flight. Callers must check the returned `coverage` before using the tree
-	/// for non-rendering features.
+	/// This is a render-oriented API. It may return a [`RenderSyntaxSelection::Viewport`]
+	/// when no suitable full-document tree is available.
 	pub fn syntax_for_viewport(
 		&self, doc_id: DocumentId, doc_version: u64, viewport: Range<u32>,
-	) -> Option<SyntaxSelection<'_>> {
+	) -> Option<RenderSyntaxSelection<'_>> {
 		let slot = self.document(doc_id)?;
 		let mut best_overlapping: Option<ScoredSelection<'_>> = None;
 		let mut best_any: Option<ScoredSelection<'_>> = None;
@@ -393,12 +403,7 @@ impl SyntaxManager {
 			consider_candidate(
 				&mut best_overlapping,
 				&mut best_any,
-				CandidateSelection {
-					syntax: &full.syntax,
-					tree_id: full.tree_id,
-					tree_doc_version: full.doc_version,
-					coverage: None,
-				},
+				CandidateSelection::Full(full),
 				false,
 				doc_version,
 				&viewport,
@@ -410,12 +415,7 @@ impl SyntaxManager {
 				consider_candidate(
 					&mut best_overlapping,
 					&mut best_any,
-					CandidateSelection {
-						syntax: &tree.syntax,
-						tree_id: tree.tree_id,
-						tree_doc_version: tree.doc_version,
-						coverage: Some(&tree.coverage),
-					},
+					CandidateSelection::Viewport(tree),
 					enriched,
 					doc_version,
 					&viewport,
@@ -424,13 +424,15 @@ impl SyntaxManager {
 		}
 
 		best_overlapping
-			// Prefer trees that actually cover the requested viewport, but fall back to the
-			// freshest installed tree so rendering can continue while viewport parses catch up.
+			// Rendering prefers an overlapping tree, but falls back to the freshest available
+			// tree so callers can keep drawing while a better viewport parse is still in flight.
 			.or(best_any)
 			.map(|(selection, _)| selection.into_selection())
 	}
 
 	/// Installs a full-document syntax tree.
+	///
+	/// Returns the updated manager-local syntax version. Older installs are ignored.
 	pub fn install_full(&mut self, doc_id: DocumentId, syntax: Syntax, doc_version: u64) -> u64 {
 		let slot = self.document_mut(doc_id);
 		if slot
@@ -453,24 +455,29 @@ impl SyntaxManager {
 	}
 
 	/// Installs the fast viewport parse for a viewport key.
+	///
+	/// Returns the updated manager-local syntax version. Older installs are ignored.
 	pub fn install_viewport_stage_a(
-		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: Syntax, coverage: Range<u32>, doc_version: u64,
+		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: ViewportSyntax, coverage: Range<u32>, doc_version: u64,
 	) -> u64 {
 		self.install_viewport(doc_id, key, syntax, coverage, doc_version, false)
 	}
 
 	/// Installs the enriched viewport parse for a viewport key.
+	///
+	/// Returns the updated manager-local syntax version. Older installs are ignored.
 	pub fn install_viewport_stage_b(
-		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: Syntax, coverage: Range<u32>, doc_version: u64,
+		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: ViewportSyntax, coverage: Range<u32>, doc_version: u64,
 	) -> u64 {
 		self.install_viewport(doc_id, key, syntax, coverage, doc_version, true)
 	}
 
 	fn install_viewport(
-		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: Syntax, coverage: Range<u32>, doc_version: u64,
-		enriched: bool,
+		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: ViewportSyntax, coverage: Range<u32>,
+		doc_version: u64, enriched: bool,
 	) -> u64 {
 		let slot = self.document_mut(doc_id);
+		// Ignore stale viewport work once a newer full tree or viewport tree has landed.
 		if slot.best_doc_version().is_some_and(|current| current > doc_version) {
 			return slot.change_id;
 		}
@@ -481,7 +488,7 @@ impl SyntaxManager {
 		} else {
 			&mut entry.stage_a
 		};
-		*target = Some(ViewportSyntax {
+		*target = Some(InstalledViewportSyntax {
 			syntax,
 			doc_version,
 			tree_id,
@@ -519,20 +526,43 @@ impl CandidateScore {
 	}
 }
 
-struct CandidateSelection<'a> {
-	syntax: &'a Syntax,
-	tree_id: u64,
-	tree_doc_version: u64,
-	coverage: Option<&'a Range<u32>>,
+enum CandidateSelection<'a> {
+	Full(&'a InstalledSyntax),
+	Viewport(&'a InstalledViewportSyntax),
 }
 
 impl<'a> CandidateSelection<'a> {
-	fn into_selection(self) -> SyntaxSelection<'a> {
-		SyntaxSelection {
-			syntax: self.syntax,
-			tree_id: self.tree_id,
-			tree_doc_version: self.tree_doc_version,
-			coverage: self.coverage.cloned(),
+	fn coverage(&self) -> Option<&Range<u32>> {
+		match self {
+			Self::Full(_) => None,
+			Self::Viewport(tree) => Some(&tree.coverage),
+		}
+	}
+
+	fn is_full(&self) -> bool {
+		matches!(self, Self::Full(_))
+	}
+
+	fn tree_doc_version(&self) -> u64 {
+		match self {
+			Self::Full(tree) => tree.doc_version,
+			Self::Viewport(tree) => tree.doc_version,
+		}
+	}
+
+	fn into_selection(self) -> RenderSyntaxSelection<'a> {
+		match self {
+			Self::Full(tree) => RenderSyntaxSelection::Full {
+				syntax: &tree.syntax,
+				tree_id: tree.tree_id,
+				tree_doc_version: tree.doc_version,
+			},
+			Self::Viewport(tree) => RenderSyntaxSelection::Viewport {
+				syntax: &tree.syntax,
+				tree_id: tree.tree_id,
+				tree_doc_version: tree.doc_version,
+				coverage: tree.coverage.clone(),
+			},
 		}
 	}
 }
@@ -543,13 +573,8 @@ fn consider_candidate<'a>(
 	best_overlapping: &mut Option<ScoredSelection<'a>>, best_any: &mut Option<ScoredSelection<'a>>,
 	selection: CandidateSelection<'a>, enriched: bool, doc_version: u64, viewport: &Range<u32>,
 ) {
-	let score = CandidateScore::new(
-		selection.tree_doc_version,
-		selection.coverage.is_none(),
-		enriched,
-		doc_version,
-	);
-	if overlaps(selection.coverage, viewport) {
+	let score = CandidateScore::new(selection.tree_doc_version(), selection.is_full(), enriched, doc_version);
+	if overlaps(selection.coverage(), viewport) {
 		if best_overlapping.as_ref().is_none_or(|(_, prev)| score > *prev) {
 			*best_overlapping = Some((selection, score));
 		}

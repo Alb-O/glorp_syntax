@@ -11,7 +11,7 @@ and structural query helpers.
   Runtime and registry helpers. Explicit-path APIs are core; runtime-path, JIT,
   and Helix helpers are feature-gated.
 - `crates/syntax-editor`
-  Editor adapter. Viewports, document IDs, sealed windows, and highlight tiles.
+  Editor adapter. Full-document `Syntax`, render-only `ViewportSyntax`, document IDs, and highlight tiles.
 - `crates/queries`
   Reusable query products built on engine snapshots.
 
@@ -36,9 +36,10 @@ let node = snapshot.named_node_at(3, 9);
 ```
 
 For editor/IDE integration across multiple languages, prefer
-`glorp_syntax_language::RegistryLanguageLoader` over hand-rolled numeric
-language IDs. Query-loading helpers in `glorp_syntax_language` now return
-`Result` and report missing inherited files and inherit cycles explicitly.
+`glorp_syntax_language::RegistryLanguageLoader::from_registry_tolerant` over
+hand-rolled numeric language IDs so one bad runtime package does not disable
+every language. Use the strict `from_registry` constructor when you want
+fail-fast behavior instead.
 
 ## Features
 
@@ -54,6 +55,6 @@ language IDs. Query-loading helpers in `glorp_syntax_language` now return
 - `crates/language/examples/runtime_registry.rs`
   Build a registry-backed multi-language loader and parse through it.
 - `crates/syntax-editor/examples/editor_viewport_manager.rs`
-  Use the optional editor adapter for viewport selection and tile caching.
+  Use the optional editor adapter for explicit full-vs-viewport render selection and tile caching.
 - `crates/queries/examples/queries_tags.rs`
   Run reusable tag queries against an engine snapshot.

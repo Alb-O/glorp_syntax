@@ -64,6 +64,10 @@ impl DocumentSession {
 		self.config
 	}
 
+	pub fn set_config(&mut self, config: EngineConfig) {
+		self.config = config;
+	}
+
 	pub fn text(&self) -> DocumentText<'_> {
 		DocumentText::new(self.text.as_ref().slice(..))
 	}

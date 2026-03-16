@@ -1,5 +1,5 @@
 use {
-	crate::{DocumentId, Highlight, HighlightSpan, LanguageLoader, Syntax},
+	crate::{DocumentId, Highlight, HighlightSpan, LanguageLoader, RenderSyntaxSelection},
 	ropey::Rope,
 	std::collections::{HashMap, VecDeque},
 };
@@ -12,15 +12,20 @@ const MAX_TILES: usize = 16;
 /// Cache key for a highlight tile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HighlightKey {
+	/// Syntax-manager version used to invalidate tiles after tree changes.
 	pub syntax_version: u64,
+	/// Theme/version token used to invalidate tiles after style changes.
 	pub theme_epoch: u64,
+	/// Zero-based tile index in `TILE_SIZE` line units.
 	pub tile_idx: usize,
 }
 
 /// A cached highlight tile.
 #[derive(Debug, Clone)]
 pub struct HighlightTile<S> {
+	/// Cache identity for this tile.
 	pub key: HighlightKey,
+	/// Highlight spans and resolved styles stored for the tile.
 	pub spans: Vec<(HighlightSpan, S)>,
 }
 
@@ -30,13 +35,21 @@ where
 	Loader: LanguageLoader,
 	Resolve: Fn(Highlight) -> S,
 	S: Copy, {
+	/// Document whose highlight tiles are being queried.
 	pub doc_id: DocumentId,
+	/// Syntax-manager version associated with the selected tree.
 	pub syntax_version: u64,
+	/// Full document text used for line-to-byte conversion.
 	pub rope: &'a Rope,
-	pub syntax: &'a Syntax,
+	/// Render selection to highlight against.
+	pub selection: RenderSyntaxSelection<'a>,
+	/// Language/query loader used by the selected syntax tree.
 	pub loader: &'a Loader,
+	/// Maps opaque highlight ids to caller-owned style data.
 	pub style_resolver: Resolve,
+	/// Inclusive start line for the requested window.
 	pub start_line: usize,
+	/// Exclusive end line for the requested window.
 	pub end_line: usize,
 }
 
@@ -57,10 +70,12 @@ impl<S> Default for HighlightTiles<S> {
 }
 
 impl<S> HighlightTiles<S> {
+	/// Creates a tile cache with the default capacity.
 	pub fn new() -> Self {
 		Self::with_capacity(MAX_TILES)
 	}
 
+	/// Creates a tile cache with space for at most `max_tiles` cached tiles.
 	pub fn with_capacity(max_tiles: usize) -> Self {
 		assert!(max_tiles > 0, "highlight tile cache capacity must be non-zero");
 		Self {
@@ -72,10 +87,12 @@ impl<S> HighlightTiles<S> {
 		}
 	}
 
+	/// Returns the current theme epoch.
 	pub fn theme_epoch(&self) -> u64 {
 		self.theme_epoch
 	}
 
+	/// Sets the theme epoch, clearing the cache when it changes.
 	pub fn set_theme_epoch(&mut self, epoch: u64) {
 		if epoch != self.theme_epoch {
 			self.theme_epoch = epoch;
@@ -83,12 +100,14 @@ impl<S> HighlightTiles<S> {
 		}
 	}
 
+	/// Removes all cached tiles.
 	pub fn clear(&mut self) {
 		self.tiles.clear();
 		self.mru_order.clear();
 		self.index.clear();
 	}
 
+	/// Invalidates every cached tile associated with `doc_id`.
 	pub fn invalidate_document(&mut self, doc_id: DocumentId) {
 		let Some(indices) = self.index.remove(&doc_id) else {
 			return;
@@ -102,6 +121,10 @@ impl<S> HighlightTiles<S> {
 		self.compact_tiles(&removed);
 	}
 
+	/// Returns highlighted spans for the requested line window.
+	///
+	/// Tile boundaries are an internal cache detail; the returned spans are clipped to the
+	/// requested line range.
 	pub fn get_spans<Loader, Resolve>(
 		&mut self, q: HighlightSpanQuery<'_, Loader, Resolve, S>,
 	) -> Vec<(HighlightSpan, S)>
@@ -168,7 +191,7 @@ impl<S> HighlightTiles<S> {
 		let tile_end_line = ((tile_idx + 1) * TILE_SIZE).min(q.rope.len_lines());
 		let spans = build_tile_spans(
 			q.rope,
-			q.syntax,
+			&q.selection,
 			q.loader,
 			&q.style_resolver,
 			tile_start_line,
@@ -272,14 +295,19 @@ fn line_to_byte_or_eof(rope: &Rope, line: usize) -> u32 {
 }
 
 fn build_tile_spans<Loader, Resolve, S>(
-	rope: &Rope, syntax: &Syntax, loader: &Loader, style_resolver: &Resolve, start_line: usize, end_line: usize,
+	rope: &Rope, selection: &RenderSyntaxSelection<'_>, loader: &Loader, style_resolver: &Resolve, start_line: usize,
+	end_line: usize,
 ) -> Vec<(HighlightSpan, S)>
 where
 	Loader: LanguageLoader,
 	Resolve: Fn(Highlight) -> S,
 	S: Copy, {
 	let rope_len_bytes = rope.len_bytes() as u32;
-	if syntax.tree().root_node().end_byte() > rope_len_bytes {
+	let root_end_byte = match selection {
+		RenderSyntaxSelection::Full { syntax, .. } => syntax.root_end_byte(),
+		RenderSyntaxSelection::Viewport { syntax, .. } => syntax.root_end_byte(),
+	};
+	if root_end_byte > rope_len_bytes {
 		return Vec::new();
 	}
 
@@ -290,8 +318,14 @@ where
 		rope_len_bytes
 	};
 
-	syntax
-		.highlight_spans(loader, tile_start_byte..tile_end_byte)
+	let spans = match selection {
+		RenderSyntaxSelection::Full { syntax, .. } => syntax.highlight_spans(loader, tile_start_byte..tile_end_byte),
+		RenderSyntaxSelection::Viewport { syntax, .. } => {
+			syntax.highlight_spans(loader, tile_start_byte..tile_end_byte)
+		}
+	};
+
+	spans
 		.filter_map(|mut span| {
 			span.start = span.start.max(tile_start_byte).min(tile_end_byte);
 			span.end = span.end.max(tile_start_byte).min(tile_end_byte);

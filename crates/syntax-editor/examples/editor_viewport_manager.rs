@@ -1,7 +1,7 @@
 use {
 	glorp_syntax_editor::{
 		DocumentId, Highlight, HighlightSpanQuery, HighlightTiles, SealedSource, SingleLanguageLoader, Syntax,
-		SyntaxManager, SyntaxOptions, ViewportKey, tree_sitter::Grammar,
+		SyntaxManager, SyntaxOptions, ViewportKey, ViewportSyntax, tree_sitter::Grammar,
 	},
 	ropey::Rope,
 	std::error::Error,
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let viewport_start = SOURCE.find("fn middle").expect("viewport start should exist") as u32;
 	let viewport_end = SOURCE.find("\n\nconst AFTER").expect("viewport end should exist") as u32;
 	let sealed = SealedSource::from_byte_range_with_newline_padding(rope.slice(..), viewport_start..viewport_end);
-	let viewport = Syntax::new_viewport(
+	let viewport = ViewportSyntax::new(
 		sealed.into(),
 		loader.language(),
 		&loader,
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		doc_id,
 		syntax_version: manager.syntax_version(doc_id),
 		rope: &rope,
-		syntax: selection.syntax,
+		selection: selection.clone(),
 		loader: &loader,
 		style_resolver: Highlight::get,
 		start_line: rope.byte_to_line(viewport_start as usize),
@@ -72,6 +72,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 	});
 
 	assert!(spans.iter().any(|(_, style)| *style == 4));
-	println!("selected tree={} cached spans={}", selection.tree_id, spans.len());
+	println!("selected tree={} cached spans={}", selection.tree_id(), spans.len());
 	Ok(())
 }
