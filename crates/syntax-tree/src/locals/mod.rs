@@ -69,7 +69,7 @@ impl Locals {
 			let child_idx = scope_data
 				.children
 				.partition_point(|&child| self[child].range.end < pos);
-			scope_stack.push((scope, child_idx as u32));
+			scope_stack.push((scope, child_idx));
 			let Some(&child) = scope_data.children.get(child_idx) else {
 				break;
 			};
@@ -102,7 +102,7 @@ impl IndexMut<Scope> for Locals {
 #[derive(Debug)]
 pub struct ScopeCursor<'a> {
 	pub locals: &'a Locals,
-	scope_stack: Vec<(Scope, u32)>,
+	scope_stack: Vec<(Scope, usize)>,
 }
 
 impl ScopeCursor<'_> {
@@ -119,7 +119,7 @@ impl ScopeCursor<'_> {
 		'outer: loop {
 			let scope_data = &self.locals[active_scope];
 			loop {
-				let Some(&child) = scope_data.children.get(child_idx as usize) else {
+				let Some(&child) = scope_data.children.get(child_idx) else {
 					break 'outer;
 				};
 				if self.locals[child].range.start > to {

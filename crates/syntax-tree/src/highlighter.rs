@@ -8,7 +8,6 @@ use {
 	arc_swap::ArcSwap,
 	ropey::RopeSlice,
 	std::{
-		borrow::Cow,
 		cmp,
 		collections::HashMap,
 		fmt,
@@ -357,6 +356,8 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 
 		let config = self.active_config.expect("must have an active config to emit matches");
 		let locals = &self.query.syntax().layer(self.current_layer).locals;
+		// Both local checks need the same node text, so materialize it only if one of them actually asks.
+		let mut node_text = None;
 		if config
 			.highlight_query
 			.non_local_patterns
@@ -364,13 +365,14 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 			.copied()
 			.unwrap_or_default()
 		{
-			let text: Cow<str> = self
-				.query
-				.source()
-				.byte_slice(range.start as usize..range.end as usize)
-				.into();
+			let text = node_text.get_or_insert_with(|| {
+				self.query
+					.source()
+					.byte_slice(range.start as usize..range.end as usize)
+					.to_string()
+			});
 			let is_local = locals
-				.lookup_reference(node.scope, &text)
+				.lookup_reference(node.scope, text)
 				.is_some_and(|def| range.start >= def.range.start);
 			if is_local {
 				return;
@@ -380,13 +382,14 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 		let highlight = if Some(node.capture) == config.highlight_query.local_reference_capture {
 			// If this capture was a `@local.reference` from the locals queries, look up the
 			// text of the node in the current locals cursor and use that highlight.
-			let text: Cow<str> = self
-				.query
-				.source()
-				.byte_slice(range.start as usize..range.end as usize)
-				.into();
+			let text = node_text.get_or_insert_with(|| {
+				self.query
+					.source()
+					.byte_slice(range.start as usize..range.end as usize)
+					.to_string()
+			});
 			let Some(definition) = locals
-				.lookup_reference(node.scope, &text)
+				.lookup_reference(node.scope, text)
 				.filter(|def| range.start >= def.range.end)
 			else {
 				return;

@@ -223,10 +223,7 @@ impl SyntaxSlot {
 
 	pub fn best_doc_version(&self) -> Option<u64> {
 		let full_ver = self.full.as_ref().map(|tree| tree.doc_version);
-		[full_ver, self.viewport_cache.best_doc_version()]
-			.into_iter()
-			.flatten()
-			.max()
+		full_ver.max(self.viewport_cache.best_doc_version())
 	}
 
 	pub fn drop_full(&mut self) {

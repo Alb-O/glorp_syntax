@@ -356,7 +356,7 @@ impl Syntax {
 		&mut self, layer: Layer, edits: &[tree_sitter::InputEdit], source: RopeSlice<'_>, loader: &impl LanguageLoader,
 		mut parse_layer: impl FnMut(Layer),
 	) {
-		self.map_injections(layer, None, edits);
+		self.map_injections(layer, edits);
 		let layer_data = &mut self.layer_mut(layer);
 		let Some(LanguageConfig {
 			injection_query: injections_query,
@@ -471,14 +471,8 @@ impl Syntax {
 	}
 
 	/// Maps the layers injection ranges through edits to enable incremental re-parsing.
-	fn map_injections(
-		&mut self,
-		layer: Layer,
-		// TODO: drop this parameter?
-		offset: Option<i32>,
-		mut edits: &[tree_sitter::InputEdit],
-	) {
-		if edits.is_empty() && offset.unwrap_or(0) == 0 {
+	fn map_injections(&mut self, layer: Layer, edits: &[tree_sitter::InputEdit]) {
+		if edits.is_empty() {
 			return;
 		}
 		let layer_data = self.layer_mut(layer);
@@ -488,14 +482,8 @@ impl Syntax {
 		if first_relevant_injection == layer_data.injections.len() {
 			return;
 		}
-		let mut offset = if let Some(offset) = offset {
-			let first_relevant_edit = edits
-				.partition_point(|edit| (edit.old_end_byte as i32) < (layer_data.ranges[0].end_byte as i32 - offset));
-			edits = &edits[first_relevant_edit..];
-			offset
-		} else {
-			0
-		};
+		// Earlier injections cannot be affected because both injection ranges and edits are sorted.
+		let mut offset = 0;
 		// injections and edits are non-overlapping and sorted so we can
 		// apply edits in O(M+N) instead of O(NM)
 		let mut edits = edits.iter().peekable();

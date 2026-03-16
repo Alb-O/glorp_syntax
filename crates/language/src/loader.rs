@@ -4,7 +4,10 @@ use {
 		InjectionLanguageMarker, Language, LanguageConfig, LanguageLoader, tree_sitter::query::ParseError,
 	},
 	regex::Regex,
-	std::collections::{BTreeMap, HashMap},
+	std::{
+		borrow::Cow,
+		collections::{BTreeMap, HashMap},
+	},
 	thiserror::Error,
 };
 
@@ -196,9 +199,16 @@ impl LanguageLoader for RegistryLanguageLoader {
 	fn language_for_marker(&self, marker: InjectionLanguageMarker) -> Option<Language> {
 		match marker {
 			InjectionLanguageMarker::Name(name) => self.exact_names.get(name).map(|matcher| matcher.language),
-			InjectionLanguageMarker::Match(text) => longest_regex_match(&self.content_regexes, &text.to_string()),
-			InjectionLanguageMarker::Filename(text) => longest_regex_match(&self.filename_regexes, &text.to_string()),
-			InjectionLanguageMarker::Shebang(text) => longest_regex_match(&self.shebang_regexes, &text.to_string()),
+			// `RopeSlice` can often stay borrowed here; `Cow` only allocates when the slice spans chunks.
+			InjectionLanguageMarker::Match(text) => {
+				longest_regex_match(&self.content_regexes, Cow::<str>::from(text).as_ref())
+			}
+			InjectionLanguageMarker::Filename(text) => {
+				longest_regex_match(&self.filename_regexes, Cow::<str>::from(text).as_ref())
+			}
+			InjectionLanguageMarker::Shebang(text) => {
+				longest_regex_match(&self.shebang_regexes, Cow::<str>::from(text).as_ref())
+			}
 		}
 	}
 
@@ -217,30 +227,9 @@ fn load_pending_language(
 			language: id.clone(),
 			source,
 		})?;
-	let highlights = registry
-		.read_optional_query(id, "highlights.scm")
-		.map_err(|source| RegistryLanguageLoaderError::Query {
-			language: id.clone(),
-			filename: "highlights.scm",
-			source,
-		})?
-		.unwrap_or_default();
-	let injections = registry
-		.read_optional_query(id, "injections.scm")
-		.map_err(|source| RegistryLanguageLoaderError::Query {
-			language: id.clone(),
-			filename: "injections.scm",
-			source,
-		})?
-		.unwrap_or_default();
-	let locals = registry
-		.read_optional_query(id, "locals.scm")
-		.map_err(|source| RegistryLanguageLoaderError::Query {
-			language: id.clone(),
-			filename: "locals.scm",
-			source,
-		})?
-		.unwrap_or_default();
+	let highlights = read_optional_registry_query(registry, id, "highlights.scm")?;
+	let injections = read_optional_registry_query(registry, id, "injections.scm")?;
+	let locals = read_optional_registry_query(registry, id, "locals.scm")?;
 	let config = LanguageConfig::new(grammar, &highlights, &injections, &locals).map_err(|source| {
 		RegistryLanguageLoaderError::Parse {
 			language: id.clone(),
@@ -265,6 +254,19 @@ fn load_pending_language(
 		filename_regexes: compile_regexes(id, "filename", &spec.filename_regexes)?,
 		shebang_regexes: compile_regexes(id, "shebang", &spec.shebang_regexes)?,
 	})
+}
+
+fn read_optional_registry_query(
+	registry: &LanguageRegistry, id: &LanguageId, filename: &'static str,
+) -> Result<String, RegistryLanguageLoaderError> {
+	Ok(registry
+		.read_optional_query(id, filename)
+		.map_err(|source| RegistryLanguageLoaderError::Query {
+			language: id.clone(),
+			filename,
+			source,
+		})?
+		.unwrap_or_default())
 }
 
 fn check_exact_names(
