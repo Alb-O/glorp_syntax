@@ -1,8 +1,8 @@
 use {
 	super::*,
-	crate::{SealedSource, SingleLanguageLoader, Syntax, SyntaxOptions, ViewportSyntax, tree_sitter::Grammar},
+	crate::{RenderSyntax, SealedSource, SingleLanguageLoader, SyntaxOptions, tree_sitter::Grammar},
 	ropey::Rope,
-	std::sync::Arc,
+	std::{ops::Range, sync::Arc},
 };
 
 fn loader() -> SingleLanguageLoader {
@@ -10,20 +10,21 @@ fn loader() -> SingleLanguageLoader {
 	SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build")
 }
 
-fn rust_syntax(src: &str) -> Syntax {
+fn rust_full_render_syntax(src: &str) -> RenderSyntax {
 	let loader = loader();
 	let rope = Rope::from_str(src);
-	Syntax::new(rope.slice(..), loader.language(), &loader, SyntaxOptions::default()).expect("syntax should parse")
+	RenderSyntax::new_full(rope.slice(..), loader.language(), &loader, SyntaxOptions::default())
+		.expect("syntax should parse")
 }
 
-fn rust_viewport_syntax(src: &str, coverage: Range<u32>) -> ViewportSyntax {
+fn rust_viewport_render_syntax(src: &str, coverage: Range<u32>) -> RenderSyntax {
 	let loader = loader();
 	let rope = Rope::from_str(src);
 	let sealed = Arc::new(SealedSource::from_byte_range_with_newline_padding(
 		rope.slice(..),
 		coverage.clone(),
 	));
-	ViewportSyntax::new(
+	RenderSyntax::new_viewport(
 		sealed,
 		loader.language(),
 		&loader,
@@ -51,7 +52,7 @@ fn syntax_manager_tracks_updates_for_installed_documents() {
 
 	assert!(!manager.take_updated(doc_id));
 	assert!(!manager.has_syntax(doc_id));
-	manager.install_full(doc_id, rust_syntax("fn alpha() {}\n"), 1);
+	manager.install_full(doc_id, rust_full_render_syntax("fn alpha() {}\n"), 1);
 	assert!(manager.take_updated(doc_id));
 	assert!(!manager.take_updated(doc_id));
 	manager.remember_full_tree_for_content(doc_id, &content, 7);
@@ -83,7 +84,7 @@ fn restore_requires_matching_compatibility_key() {
 	let doc_id = DocumentId(99);
 	let content = Rope::from_str("fn alpha() {}\n");
 
-	manager.install_full(doc_id, rust_syntax("fn alpha() {}\n"), 1);
+	manager.install_full(doc_id, rust_full_render_syntax("fn alpha() {}\n"), 1);
 	manager.remember_full_tree_for_content(doc_id, &content, 10);
 
 	assert!(!manager.restore_full_tree_for_content(doc_id, &content, 11, 2));
@@ -91,18 +92,21 @@ fn restore_requires_matching_compatibility_key() {
 }
 
 #[test]
-fn full_document_selection_never_falls_back_to_viewport_tree() {
+fn full_document_selection_prefers_full_render_tree() {
 	let mut manager = SyntaxManager::new();
 	let doc_id = DocumentId(33);
 	let key = ViewportKey(5);
-	let viewport = rust_viewport_syntax("fn viewport() {}\n", 0..16);
+	let viewport = rust_viewport_render_syntax("fn viewport() {}\n", 0..16);
 
-	manager.install_viewport_stage_b(doc_id, key, viewport, 0..16, 2);
+	manager.install_viewport_stage_b(doc_id, key, viewport, 2);
+	manager.install_full(doc_id, rust_full_render_syntax("fn viewport() {}\n"), 3);
 
-	assert!(manager.full_syntax_for_doc(doc_id).is_none());
+	let selection = manager
+		.syntax_for_viewport(doc_id, 3, 0..16)
+		.expect("render selection should exist");
 
-	manager.install_full(doc_id, rust_syntax("fn viewport() {}\n"), 3);
-	assert!(manager.full_syntax_for_doc(doc_id).is_some());
+	assert!(selection.syntax().is_full());
+	assert_eq!(selection.coverage(), None);
 }
 
 #[test]
@@ -111,13 +115,13 @@ fn render_selection_reports_viewport_coverage_explicitly() {
 	let doc_id = DocumentId(34);
 	let key = ViewportKey(8);
 
-	manager.install_viewport_stage_b(doc_id, key, rust_viewport_syntax("fn viewport() {}\n", 0..16), 0..16, 2);
+	manager.install_viewport_stage_b(doc_id, key, rust_viewport_render_syntax("fn viewport() {}\n", 0..16), 2);
 
 	let selection = manager
 		.syntax_for_viewport(doc_id, 2, 0..16)
 		.expect("viewport selection should exist");
 	assert_eq!(selection.coverage(), Some(0..16));
-	assert!(matches!(selection, RenderSyntaxSelection::Viewport { .. }));
+	assert!(!selection.syntax().is_full());
 }
 
 #[test]
@@ -125,11 +129,11 @@ fn stale_viewport_installs_are_ignored() {
 	let mut manager = SyntaxManager::new();
 	let doc_id = DocumentId(1);
 	let key = ViewportKey(9);
-	let fresh = rust_viewport_syntax("fn fresh() {}\n", 0..12);
-	let stale = rust_viewport_syntax("fn stale() {}\n", 0..12);
+	let fresh = rust_viewport_render_syntax("fn fresh() {}\n", 0..12);
+	let stale = rust_viewport_render_syntax("fn stale() {}\n", 0..12);
 
-	let change_id = manager.install_viewport_stage_b(doc_id, key, fresh, 0..12, 3);
-	let returned = manager.install_viewport_stage_a(doc_id, key, stale, 0..12, 2);
+	let change_id = manager.install_viewport_stage_b(doc_id, key, fresh, 3);
+	let returned = manager.install_viewport_stage_a(doc_id, key, stale, 2);
 
 	assert_eq!(returned, change_id);
 	let entry = manager
@@ -145,11 +149,11 @@ fn stale_viewports_do_not_reappear_after_newer_full_tree() {
 	let mut manager = SyntaxManager::new();
 	let doc_id = DocumentId(2);
 	let key = ViewportKey(3);
-	let full = rust_syntax("fn full() {}\n");
-	let stale = rust_viewport_syntax("fn stale() {}\n", 0..11);
+	let full = rust_full_render_syntax("fn full() {}\n");
+	let stale = rust_viewport_render_syntax("fn stale() {}\n", 0..11);
 
 	let change_id = manager.install_full(doc_id, full, 5);
-	let returned = manager.install_viewport_stage_b(doc_id, key, stale, 0..11, 4);
+	let returned = manager.install_viewport_stage_b(doc_id, key, stale, 4);
 
 	assert_eq!(returned, change_id);
 	assert!(

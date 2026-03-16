@@ -17,5 +17,5 @@ pub use {
 	highlight_cache::{HighlightKey, HighlightSpanQuery, HighlightTile, HighlightTiles, TILE_SIZE},
 	manager::{DocumentId, RenderSyntaxSelection, SyntaxManager, ViewportKey},
 	sealed_source::SealedSource,
-	syntax::{Syntax, SyntaxOptions, ViewportMetadata, ViewportSyntax},
+	syntax::{DocumentSyntax, RenderSyntax, SyntaxOptions, ViewportMetadata},
 };

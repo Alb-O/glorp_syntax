@@ -328,18 +328,11 @@ where
 		rope_len_bytes
 	};
 
-	let spans = match selection {
-		RenderSyntaxSelection::Full { syntax, .. } if syntax.root_end_byte() <= rope_len_bytes => {
-			syntax.highlight_spans(loader, tile_start_byte..tile_end_byte)
-		}
-		RenderSyntaxSelection::Viewport { syntax, .. } => {
-			if syntax.root_end_byte() > rope_len_bytes {
-				return Vec::new();
-			}
-			syntax.highlight_spans(loader, tile_start_byte..tile_end_byte)
-		}
-		RenderSyntaxSelection::Full { .. } => return Vec::new(),
-	};
+	let syntax = selection.syntax();
+	if syntax.root_end_byte() > rope_len_bytes {
+		return Vec::new();
+	}
+	let spans = syntax.highlight_spans(loader, tile_start_byte..tile_end_byte);
 
 	spans
 		.filter_map(|mut span| {

@@ -1,5 +1,5 @@
 use {
-	crate::{Syntax, ViewportSyntax},
+	crate::RenderSyntax,
 	ropey::Rope,
 	std::{
 		collections::{HashMap, VecDeque},
@@ -18,28 +18,20 @@ pub struct DocumentId(pub u64);
 pub struct ViewportKey(pub u32);
 
 #[derive(Debug, Clone)]
-struct InstalledSyntax {
-	syntax: Syntax,
+struct InstalledRenderSyntax {
+	syntax: RenderSyntax,
 	doc_version: u64,
 	tree_id: u64,
-}
-
-#[derive(Debug, Clone)]
-struct InstalledViewportSyntax {
-	syntax: ViewportSyntax,
-	doc_version: u64,
-	tree_id: u64,
-	coverage: Range<u32>,
 }
 
 #[derive(Debug, Default, Clone)]
 struct ViewportEntry {
-	stage_a: Option<InstalledViewportSyntax>,
-	stage_b: Option<InstalledViewportSyntax>,
+	stage_a: Option<InstalledRenderSyntax>,
+	stage_b: Option<InstalledRenderSyntax>,
 }
 
 impl ViewportEntry {
-	fn stages(&self) -> impl Iterator<Item = (&InstalledViewportSyntax, bool)> + '_ {
+	fn stages(&self) -> impl Iterator<Item = (&InstalledRenderSyntax, bool)> + '_ {
 		self.stage_b
 			.iter()
 			.map(|tree| (tree, true))
@@ -55,7 +47,7 @@ impl ViewportEntry {
 struct FullTreeMemoryEntry {
 	content: Rope,
 	compatibility_key: u64,
-	syntax: Syntax,
+	syntax: RenderSyntax,
 }
 
 /// MRU cache of viewport-bounded parse results.
@@ -113,8 +105,6 @@ impl ViewportCache {
 	}
 
 	pub fn has_any(&self) -> bool {
-		// Entries only appear via `get_mut_or_insert` immediately before a stage is populated,
-		// so an empty map is equivalent to "no viewport trees installed".
 		!self.map.is_empty()
 	}
 
@@ -135,54 +125,43 @@ impl ViewportCache {
 	}
 }
 
-/// Best syntax tree selected for viewport rendering.
-#[derive(Debug, Clone)]
-pub enum RenderSyntaxSelection<'a> {
-	/// A full-document tree aligned to document byte offsets.
-	Full {
-		/// Selected full-document syntax tree.
-		syntax: &'a Syntax,
-		/// Monotonic tree identifier assigned by [`SyntaxManager`].
-		tree_id: u64,
-		/// Document version associated with the selected tree.
-		tree_doc_version: u64,
-	},
-	/// A viewport-local tree suitable for rendering fallback.
-	Viewport {
-		/// Selected viewport syntax tree.
-		syntax: &'a ViewportSyntax,
-		/// Monotonic tree identifier assigned by [`SyntaxManager`].
-		tree_id: u64,
-		/// Document version associated with the selected tree.
-		tree_doc_version: u64,
-		/// Covered byte range in full-document coordinates.
-		coverage: Range<u32>,
-	},
+/// Best render tree selected for a viewport query.
+#[derive(Debug, Clone, Copy)]
+pub struct RenderSyntaxSelection<'a> {
+	syntax: &'a RenderSyntax,
+	tree_id: u64,
+	tree_doc_version: u64,
 }
 
 impl<'a> RenderSyntaxSelection<'a> {
+	fn new(syntax: &'a RenderSyntax, tree_id: u64, tree_doc_version: u64) -> Self {
+		Self {
+			syntax,
+			tree_id,
+			tree_doc_version,
+		}
+	}
+
+	/// Returns the selected render tree.
+	pub fn syntax(&self) -> &'a RenderSyntax {
+		self.syntax
+	}
+
 	/// Returns the selected tree's monotonic manager-local identifier.
 	pub fn tree_id(&self) -> u64 {
-		match self {
-			Self::Full { tree_id, .. } | Self::Viewport { tree_id, .. } => *tree_id,
-		}
+		self.tree_id
 	}
 
 	/// Returns the document version associated with the selected tree.
 	pub fn tree_doc_version(&self) -> u64 {
-		match self {
-			Self::Full { tree_doc_version, .. } | Self::Viewport { tree_doc_version, .. } => *tree_doc_version,
-		}
+		self.tree_doc_version
 	}
 
 	/// Returns the selected viewport coverage in document byte coordinates.
 	///
 	/// Full-document selections return `None`.
 	pub fn coverage(&self) -> Option<Range<u32>> {
-		match self {
-			Self::Full { .. } => None,
-			Self::Viewport { coverage, .. } => Some(coverage.clone()),
-		}
+		self.syntax.coverage()
 	}
 }
 
@@ -195,7 +174,7 @@ pub struct SyntaxManager {
 /// Per-document syntax state.
 #[derive(Debug, Default, Clone)]
 struct SyntaxSlot {
-	full: Option<InstalledSyntax>,
+	full: Option<InstalledRenderSyntax>,
 	viewport_cache: ViewportCache,
 	dirty: bool,
 	updated: bool,
@@ -253,7 +232,6 @@ impl SyntaxSlot {
 		match self.full_tree_memory_pos(content, compatibility_key) {
 			Some(0) => return,
 			Some(pos) => {
-				// Refresh recency without duplicating an existing content-compatible snapshot.
 				self.full_tree_memory.remove(pos);
 			}
 			None => {}
@@ -277,13 +255,11 @@ impl SyntaxSlot {
 			.remove(pos)
 			.expect("full tree memory position must be valid");
 		let tree_id = self.alloc_tree_id();
-		self.full = Some(InstalledSyntax {
+		self.full = Some(InstalledRenderSyntax {
 			syntax: remembered.syntax.clone(),
 			doc_version,
 			tree_id,
 		});
-		// Restoring also refreshes this entry's recency so repeated undo/redo-like
-		// content matches keep using the hot cached tree.
 		self.full_tree_memory.push_front(remembered);
 		self.updated = true;
 		self.change_id = self.change_id.wrapping_add(1);
@@ -395,28 +371,19 @@ impl SyntaxManager {
 		self.document(doc_id).map_or(0, |slot| slot.change_id)
 	}
 
-	/// Returns the installed full-document syntax tree for the document, if present.
-	pub fn full_syntax_for_doc(&self, doc_id: DocumentId) -> Option<&Syntax> {
-		self.document(doc_id)
-			.and_then(|slot| slot.full.as_ref().map(|full| &full.syntax))
-	}
-
-	/// Selects the best installed syntax tree for a render viewport.
-	///
-	/// This is a render-oriented API. It may return a [`RenderSyntaxSelection::Viewport`]
-	/// when no suitable full-document tree is available.
+	/// Selects the best installed render tree for a viewport.
 	pub fn syntax_for_viewport(
 		&self, doc_id: DocumentId, doc_version: u64, viewport: Range<u32>,
 	) -> Option<RenderSyntaxSelection<'_>> {
 		let slot = self.document(doc_id)?;
-		let mut best_overlapping: Option<ScoredSelection<'_>> = None;
-		let mut best_any: Option<ScoredSelection<'_>> = None;
+		let mut best_overlapping: Option<(&InstalledRenderSyntax, CandidateScore)> = None;
+		let mut best_any: Option<(&InstalledRenderSyntax, CandidateScore)> = None;
 
 		if let Some(full) = slot.full.as_ref() {
 			consider_candidate(
 				&mut best_overlapping,
 				&mut best_any,
-				CandidateSelection::Full(full),
+				full,
 				false,
 				doc_version,
 				&viewport,
@@ -428,7 +395,7 @@ impl SyntaxManager {
 				consider_candidate(
 					&mut best_overlapping,
 					&mut best_any,
-					CandidateSelection::Viewport(tree),
+					tree,
 					enriched,
 					doc_version,
 					&viewport,
@@ -436,17 +403,20 @@ impl SyntaxManager {
 			}
 		}
 
+		// Rendering prefers coverage over freshness: if anything overlaps the requested viewport,
+		// pick the best overlapping tree; only fall back to the freshest non-overlapping tree when
+		// that keeps the UI drawing while a better viewport parse is still in flight.
 		best_overlapping
-			// Rendering prefers an overlapping tree, but falls back to the freshest available
-			// tree so callers can keep drawing while a better viewport parse is still in flight.
 			.or(best_any)
-			.map(|(selection, _)| selection.into_selection())
+			.map(|(tree, _)| RenderSyntaxSelection::new(&tree.syntax, tree.tree_id, tree.doc_version))
 	}
 
-	/// Installs a full-document syntax tree.
+	/// Installs a full-document render tree.
 	///
 	/// Returns the updated manager-local syntax version. Older installs are ignored.
-	pub fn install_full(&mut self, doc_id: DocumentId, syntax: Syntax, doc_version: u64) -> u64 {
+	pub fn install_full(&mut self, doc_id: DocumentId, syntax: RenderSyntax, doc_version: u64) -> u64 {
+		assert!(syntax.is_full(), "install_full requires a full render tree");
+
 		let slot = self.document_mut(doc_id);
 		if slot
 			.full
@@ -456,7 +426,7 @@ impl SyntaxManager {
 			return slot.change_id;
 		}
 		let tree_id = slot.alloc_tree_id();
-		slot.full = Some(InstalledSyntax {
+		slot.full = Some(InstalledRenderSyntax {
 			syntax,
 			doc_version,
 			tree_id,
@@ -471,26 +441,31 @@ impl SyntaxManager {
 	///
 	/// Returns the updated manager-local syntax version. Older installs are ignored.
 	pub fn install_viewport_stage_a(
-		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: ViewportSyntax, coverage: Range<u32>, doc_version: u64,
+		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: RenderSyntax, doc_version: u64,
 	) -> u64 {
-		self.install_viewport(doc_id, key, syntax, coverage, doc_version, false)
+		self.install_viewport(doc_id, key, syntax, doc_version, false)
 	}
 
 	/// Installs the enriched viewport parse for a viewport key.
 	///
 	/// Returns the updated manager-local syntax version. Older installs are ignored.
 	pub fn install_viewport_stage_b(
-		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: ViewportSyntax, coverage: Range<u32>, doc_version: u64,
+		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: RenderSyntax, doc_version: u64,
 	) -> u64 {
-		self.install_viewport(doc_id, key, syntax, coverage, doc_version, true)
+		self.install_viewport(doc_id, key, syntax, doc_version, true)
 	}
 
 	fn install_viewport(
-		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: ViewportSyntax, coverage: Range<u32>,
-		doc_version: u64, enriched: bool,
+		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: RenderSyntax, doc_version: u64, enriched: bool,
 	) -> u64 {
+		assert!(
+			syntax.is_viewport(),
+			"viewport installs require a viewport-backed render tree"
+		);
+
 		let slot = self.document_mut(doc_id);
-		// Ignore stale viewport work once a newer full tree or viewport tree has landed.
+		// Once any newer tree lands for the document, older viewport work is just stale background
+		// work and should not churn cache state or selection order.
 		if slot.best_doc_version().is_some_and(|current| current > doc_version) {
 			return slot.change_id;
 		}
@@ -501,11 +476,10 @@ impl SyntaxManager {
 		} else {
 			&mut entry.stage_a
 		};
-		*target = Some(InstalledViewportSyntax {
+		*target = Some(InstalledRenderSyntax {
 			syntax,
 			doc_version,
 			tree_id,
-			coverage,
 		});
 		slot.updated = true;
 		slot.change_id = slot.change_id.wrapping_add(1);
@@ -513,7 +487,7 @@ impl SyntaxManager {
 	}
 }
 
-fn overlaps(coverage: Option<&Range<u32>>, viewport: &Range<u32>) -> bool {
+fn overlaps(coverage: Option<Range<u32>>, viewport: &Range<u32>) -> bool {
 	match coverage {
 		None => true,
 		Some(coverage) => viewport.start < coverage.end && viewport.end > coverage.start,
@@ -539,60 +513,18 @@ impl CandidateScore {
 	}
 }
 
-enum CandidateSelection<'a> {
-	Full(&'a InstalledSyntax),
-	Viewport(&'a InstalledViewportSyntax),
-}
-
-impl<'a> CandidateSelection<'a> {
-	fn coverage(&self) -> Option<&Range<u32>> {
-		match self {
-			Self::Full(_) => None,
-			Self::Viewport(tree) => Some(&tree.coverage),
-		}
-	}
-
-	fn is_full(&self) -> bool {
-		matches!(self, Self::Full(_))
-	}
-
-	fn tree_doc_version(&self) -> u64 {
-		match self {
-			Self::Full(tree) => tree.doc_version,
-			Self::Viewport(tree) => tree.doc_version,
-		}
-	}
-
-	fn into_selection(self) -> RenderSyntaxSelection<'a> {
-		match self {
-			Self::Full(tree) => RenderSyntaxSelection::Full {
-				syntax: &tree.syntax,
-				tree_id: tree.tree_id,
-				tree_doc_version: tree.doc_version,
-			},
-			Self::Viewport(tree) => RenderSyntaxSelection::Viewport {
-				syntax: &tree.syntax,
-				tree_id: tree.tree_id,
-				tree_doc_version: tree.doc_version,
-				coverage: tree.coverage.clone(),
-			},
-		}
-	}
-}
-
-type ScoredSelection<'a> = (CandidateSelection<'a>, CandidateScore);
-
 fn consider_candidate<'a>(
-	best_overlapping: &mut Option<ScoredSelection<'a>>, best_any: &mut Option<ScoredSelection<'a>>,
-	selection: CandidateSelection<'a>, enriched: bool, doc_version: u64, viewport: &Range<u32>,
+	best_overlapping: &mut Option<(&'a InstalledRenderSyntax, CandidateScore)>,
+	best_any: &mut Option<(&'a InstalledRenderSyntax, CandidateScore)>, tree: &'a InstalledRenderSyntax,
+	enriched: bool, doc_version: u64, viewport: &Range<u32>,
 ) {
-	let score = CandidateScore::new(selection.tree_doc_version(), selection.is_full(), enriched, doc_version);
-	if overlaps(selection.coverage(), viewport) {
+	let score = CandidateScore::new(tree.doc_version, tree.syntax.is_full(), enriched, doc_version);
+	if overlaps(tree.syntax.coverage(), viewport) {
 		if best_overlapping.as_ref().is_none_or(|(_, prev)| score > *prev) {
-			*best_overlapping = Some((selection, score));
+			*best_overlapping = Some((tree, score));
 		}
 	} else if best_any.as_ref().is_none_or(|(_, prev)| score > *prev) {
-		*best_any = Some((selection, score));
+		*best_any = Some((tree, score));
 	}
 }
 

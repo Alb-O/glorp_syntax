@@ -11,7 +11,7 @@ and structural query helpers.
   Runtime and registry helpers. Explicit-path APIs are core; runtime-path, JIT,
   and Helix helpers are feature-gated.
 - `crates/syntax-editor`
-  Editor adapter. Full-document `Syntax`, render-only `ViewportSyntax`, document IDs, and highlight tiles.
+  Editor adapter. Full-document `DocumentSyntax`, render-oriented `RenderSyntax`, document IDs, and highlight tiles.
 - `crates/queries`
   Reusable query products built on engine snapshots.
 

@@ -1,7 +1,7 @@
 use {
 	glorp_syntax_editor::{
-		DocumentId, Highlight, HighlightSpanQuery, HighlightTiles, SealedSource, SingleLanguageLoader, Syntax,
-		SyntaxManager, SyntaxOptions, ViewportKey, ViewportSyntax, tree_sitter::Grammar,
+		DocumentId, Highlight, HighlightSpanQuery, HighlightTiles, RenderSyntax, SealedSource, SingleLanguageLoader,
+		SyntaxManager, SyntaxOptions, ViewportKey, tree_sitter::Grammar,
 	},
 	ropey::Rope,
 	std::error::Error,
@@ -38,11 +38,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 		})
 	})?;
 	let rope = Rope::from_str(SOURCE);
-	let full = Syntax::new(rope.slice(..), loader.language(), &loader, SyntaxOptions::default())?;
+	let full = RenderSyntax::new_full(rope.slice(..), loader.language(), &loader, SyntaxOptions::default())?;
 	let viewport_start = SOURCE.find("fn middle").expect("viewport start should exist") as u32;
 	let viewport_end = SOURCE.find("\n\nconst AFTER").expect("viewport end should exist") as u32;
 	let sealed = SealedSource::from_byte_range_with_newline_padding(rope.slice(..), viewport_start..viewport_end);
-	let viewport = ViewportSyntax::new(
+	let viewport = RenderSyntax::new_viewport(
 		sealed.into(),
 		loader.language(),
 		&loader,
@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let viewport_key = ViewportKey(1);
 	let mut manager = SyntaxManager::new();
 	manager.install_full(doc_id, full, 1);
-	manager.install_viewport_stage_b(doc_id, viewport_key, viewport, viewport_start..viewport_end, 2);
+	manager.install_viewport_stage_b(doc_id, viewport_key, viewport, 2);
 
 	let selection = manager
 		.syntax_for_viewport(doc_id, 2, viewport_start..viewport_end)
