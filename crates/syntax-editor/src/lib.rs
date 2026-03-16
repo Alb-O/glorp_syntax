@@ -15,10 +15,7 @@ pub use {
 		tree_sitter,
 	},
 	highlight_cache::{HighlightKey, HighlightSpanQuery, HighlightTile, HighlightTiles, TILE_SIZE},
-	manager::{
-		DocumentId, InstalledSyntax, SyntaxManager, SyntaxSelection, SyntaxSlot, ViewportEntry, ViewportKey,
-		ViewportSyntax,
-	},
+	manager::{DocumentId, SyntaxManager, SyntaxSelection, ViewportKey},
 	sealed_source::SealedSource,
 	syntax::{Syntax, SyntaxOptions, ViewportMetadata},
 };

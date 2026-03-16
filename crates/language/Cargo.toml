@@ -14,5 +14,10 @@ helix-runtime = ["default-runtime-paths"]
 [dependencies]
 cc.workspace = true
 glorp_syntax_tree = { path = "../syntax-tree" }
+regex.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+ropey.workspace = true
+tree-sitter-rust.workspace = true

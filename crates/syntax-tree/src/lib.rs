@@ -1,3 +1,10 @@
+//! Incremental tree-sitter engine primitives for editor integrations.
+//!
+//! The primary entry points are:
+//! - [`DocumentSession`] for owning mutable text and applying edits
+//! - [`DocumentSnapshot`] for read-only queries, highlighting, and tree traversal
+//! - [`LanguageLoader`] for resolving grammars and query configuration per language
+
 use {
 	crate::parse::LayerUpdateFlags,
 	locals::Locals,
@@ -13,11 +20,11 @@ use {
 pub use {
 	crate::{
 		change::{ChangeSet, Revision, SnapshotId, TextEdit, UpdateResult},
-		config::{LanguageConfig, LanguageLoader, SingleLanguageLoader, read_query},
+		config::{LanguageConfig, LanguageLoader, ReadQueryError, SingleLanguageLoader, read_query},
 		highlighter::{HighlightSpan, HighlightSpans},
 		injections_query::{InjectionLanguageMarker, InjectionsQuery},
 		session::{DocumentSession, EngineConfig},
-		snapshot::{DocumentSnapshot, LocalScope},
+		snapshot::{CaptureMatches, DocumentSnapshot, LocalScope},
 		text::{ByteRangeText, DocumentText, RopeText, StringText, TextSlice, TextStorage},
 		tree_cursor::TreeCursor,
 	},

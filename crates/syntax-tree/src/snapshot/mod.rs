@@ -9,8 +9,28 @@ use {
 	},
 	ropey::{Rope, RopeSlice},
 	std::{ops::RangeBounds, sync::Arc},
-	tree_sitter::{Capture, InactiveQueryCursor, Node, Query, RopeInput, Tree},
+	tree_sitter::{Capture, InactiveQueryCursor, Node, Query, QueryCursor, RopeInput, Tree},
 };
+
+/// Streaming iterator over non-empty node groups for one query capture.
+pub struct CaptureMatches<'a, 'tree> {
+	cursor: QueryCursor<'a, 'tree, RopeInput<'a>>,
+	capture: Capture,
+}
+
+impl<'a, 'tree> Iterator for CaptureMatches<'a, 'tree> {
+	type Item = Vec<Node<'tree>>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		while let Some(query_match) = self.cursor.next_match() {
+			let group: Vec<_> = query_match.nodes_for_capture(self.capture).cloned().collect();
+			if !group.is_empty() {
+				return Some(group);
+			}
+		}
+		None
+	}
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct LocalScope<'a> {
@@ -24,6 +44,7 @@ impl<'a> LocalScope<'a> {
 	}
 }
 
+/// Immutable view of document text and syntax at one revision.
 #[derive(Debug, Clone)]
 pub struct DocumentSnapshot {
 	id: SnapshotId,
@@ -151,19 +172,20 @@ impl DocumentSnapshot {
 	pub fn matched_capture_nodes<'a>(
 		&'a self, query: &'a Query, capture: Capture, node: Node<'a>,
 	) -> Vec<Vec<Node<'a>>> {
-		let mut cursor = InactiveQueryCursor::new(0..u32::MAX, TREE_SITTER_MATCH_LIMIT).execute_query(
-			query,
-			&node,
-			RopeInput::new(self.rope_slice()),
-		);
-		let mut matched = Vec::new();
-		while let Some(mat) = cursor.next_match() {
-			let group: Vec<_> = mat.nodes_for_capture(capture).cloned().collect();
-			if !group.is_empty() {
-				matched.push(group);
-			}
+		// Keep the old allocation-heavy helper for callers that want a collected result,
+		// but route it through the streaming implementation so semantics stay aligned.
+		self.capture_matches(query, capture, node).collect()
+	}
+
+	pub fn capture_matches<'a>(&'a self, query: &'a Query, capture: Capture, node: Node<'a>) -> CaptureMatches<'a, 'a> {
+		CaptureMatches {
+			cursor: InactiveQueryCursor::new(0..u32::MAX, TREE_SITTER_MATCH_LIMIT).execute_query(
+				query,
+				&node,
+				RopeInput::new(self.rope_slice()),
+			),
+			capture,
 		}
-		matched
 	}
 	pub(crate) fn rope_slice(&self) -> RopeSlice<'_> {
 		self.text.slice(..)

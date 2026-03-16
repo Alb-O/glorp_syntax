@@ -58,8 +58,11 @@ version = "0.1.0"
 dependencies = [
  "cc",
  "glorp_syntax_tree",
+ "regex",
+ "ropey",
  "thiserror",
  "tracing",
+ "tree-sitter-rust",
 ]
 
 [[package]]

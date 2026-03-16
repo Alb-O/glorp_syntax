@@ -3,6 +3,7 @@
 
 //! Structural tree-sitter query helpers built on top of `glorp_syntax_tree`.
 
+/// Re-export of [`glorp_syntax_tree::read_query`] for query-file resolution.
 pub use glorp_syntax_tree::read_query;
 use glorp_syntax_tree::{
 	DocumentSnapshot,
@@ -23,6 +24,7 @@ pub struct IndentQuery {
 }
 
 impl IndentQuery {
+	/// Parses an indentation query for `grammar`.
 	pub fn new(grammar: Grammar, source: &str) -> Result<Self, glorp_syntax_tree::tree_sitter::query::ParseError> {
 		let query = Query::new(grammar, source, |_pattern, predicate| match predicate {
 			UserPredicate::SetProperty {
@@ -41,6 +43,7 @@ impl IndentQuery {
 		})
 	}
 
+	/// Returns the underlying tree-sitter query.
 	pub fn query(&self) -> &Query {
 		&self.query
 	}
@@ -53,25 +56,34 @@ pub struct TextObjectQuery {
 }
 
 impl TextObjectQuery {
+	/// Parses a text-object query for `grammar`.
 	pub fn new(grammar: Grammar, source: &str) -> Result<Self, glorp_syntax_tree::tree_sitter::query::ParseError> {
 		let query = Query::new(grammar, source, |_, _| Ok(()))?;
 		Ok(Self { query })
 	}
 
+	/// Streams nodes captured under `capture_name`.
 	pub fn capture_nodes<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
 		let capture = self.query.get_capture(capture_name)?;
-		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
-		Some(matched.into_iter().filter_map(CapturedNode::from_nodes))
+		Some(
+			snapshot
+				.capture_matches(&self.query, capture, snapshot.root_node())
+				.filter_map(CapturedNode::from_nodes),
+		)
 	}
 
+	/// Streams nodes for the first capture name present in `capture_names`.
 	pub fn capture_nodes_any<'a>(
 		&'a self, capture_names: &[&str], snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
 		let capture = capture_names.iter().find_map(|name| self.query.get_capture(name))?;
-		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
-		Some(matched.into_iter().filter_map(CapturedNode::from_nodes))
+		Some(
+			snapshot
+				.capture_matches(&self.query, capture, snapshot.root_node())
+				.filter_map(CapturedNode::from_nodes),
+		)
 	}
 }
 
@@ -91,6 +103,7 @@ impl<'a> CapturedNode<'a> {
 		}
 	}
 
+	/// Returns the first byte covered by the captured node group.
 	pub fn start_byte(&self) -> usize {
 		match self {
 			Self::Single(node) => node.start_byte() as usize,
@@ -98,6 +111,7 @@ impl<'a> CapturedNode<'a> {
 		}
 	}
 
+	/// Returns the exclusive end byte covered by the captured node group.
 	pub fn end_byte(&self) -> usize {
 		match self {
 			Self::Single(node) => node.end_byte() as usize,
@@ -105,6 +119,7 @@ impl<'a> CapturedNode<'a> {
 		}
 	}
 
+	/// Returns the covered byte range.
 	pub fn byte_range(&self) -> std::ops::Range<usize> {
 		self.start_byte()..self.end_byte()
 	}
@@ -117,6 +132,7 @@ pub struct TagQuery {
 }
 
 impl TagQuery {
+	/// Parses a tag query for `grammar`.
 	pub fn new(grammar: Grammar, source: &str) -> Result<Self, glorp_syntax_tree::tree_sitter::query::ParseError> {
 		let query = Query::new(grammar, source, |_pattern, predicate| match predicate {
 			UserPredicate::IsPropertySet { key: "local", .. } => Ok(()),
@@ -130,12 +146,16 @@ impl TagQuery {
 		Ok(Self { query })
 	}
 
+	/// Streams nodes captured under `capture_name`.
 	pub fn capture_nodes<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.query.get_capture(capture_name)?;
-		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
-		Some(matched.into_iter().flat_map(|nodes| nodes.into_iter()))
+		Some(
+			snapshot
+				.capture_matches(&self.query, capture, snapshot.root_node())
+				.flat_map(|nodes| nodes.into_iter()),
+		)
 	}
 }
 
@@ -148,6 +168,7 @@ pub struct RainbowQuery {
 }
 
 impl RainbowQuery {
+	/// Parses a rainbow-bracket query for `grammar`.
 	pub fn new(grammar: Grammar, source: &str) -> Result<Self, glorp_syntax_tree::tree_sitter::query::ParseError> {
 		let query = Query::new(grammar, source, |_pattern, predicate| match predicate {
 			UserPredicate::SetProperty {
@@ -169,24 +190,36 @@ impl RainbowQuery {
 		})
 	}
 
+	/// Streams nodes captured under `capture_name`.
 	pub fn capture_nodes<'a>(
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.query.get_capture(capture_name)?;
-		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
-		Some(matched.into_iter().flat_map(|nodes| nodes.into_iter()))
+		Some(
+			snapshot
+				.capture_matches(&self.query, capture, snapshot.root_node())
+				.flat_map(|nodes| nodes.into_iter()),
+		)
 	}
 
+	/// Streams nodes captured as rainbow brackets.
 	pub fn bracket_nodes<'a>(&'a self, snapshot: &'a DocumentSnapshot) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.bracket_capture?;
-		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
-		Some(matched.into_iter().flat_map(|nodes| nodes.into_iter()))
+		Some(
+			snapshot
+				.capture_matches(&self.query, capture, snapshot.root_node())
+				.flat_map(|nodes| nodes.into_iter()),
+		)
 	}
 
+	/// Streams nodes captured as rainbow scopes.
 	pub fn scope_nodes<'a>(&'a self, snapshot: &'a DocumentSnapshot) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.scope_capture?;
-		let matched = snapshot.matched_capture_nodes(&self.query, capture, snapshot.root_node());
-		Some(matched.into_iter().flat_map(|nodes| nodes.into_iter()))
+		Some(
+			snapshot
+				.capture_matches(&self.query, capture, snapshot.root_node())
+				.flat_map(|nodes| nodes.into_iter()),
+		)
 	}
 }
 

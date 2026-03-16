@@ -23,12 +23,17 @@ fn candidate_score_prefers_exact_full_then_enriched() {
 }
 
 #[test]
-fn syntax_slot_marks_restores_as_updates() {
-	let mut slot = SyntaxSlot::default();
-	assert!(!slot.take_updated());
-	slot.updated = true;
-	assert!(slot.take_updated());
-	assert!(!slot.take_updated());
+fn syntax_manager_tracks_updates_without_slot_access() {
+	let mut manager = SyntaxManager::new();
+	let doc_id = DocumentId(17);
+
+	assert!(!manager.take_updated(doc_id));
+	manager.install_full(doc_id, rust_syntax("fn alpha() {}\n"), 1);
+	assert!(manager.take_updated(doc_id));
+	assert!(!manager.take_updated(doc_id));
+	manager.remember_full_tree_for_content(doc_id, &Rope::from_str("fn alpha() {}\n"));
+	assert!(manager.restore_full_tree_for_content(doc_id, &Rope::from_str("fn alpha() {}\n"), 2));
+	assert!(manager.take_updated(doc_id));
 }
 
 #[test]

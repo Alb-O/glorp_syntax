@@ -35,6 +35,11 @@ let snapshot = session.snapshot();
 let node = snapshot.named_node_at(3, 9);
 ```
 
+For editor/IDE integration across multiple languages, prefer
+`glorp_syntax_language::RegistryLanguageLoader` over hand-rolled numeric
+language IDs. Query-loading helpers in `glorp_syntax_language` now return
+`Result` and report missing inherited files and inherit cycles explicitly.
+
 ## Features
 
 - `glorp_syntax_language` defaults: `default-runtime-paths`, `jit-grammars`, `helix-runtime`
@@ -47,7 +52,7 @@ let node = snapshot.named_node_at(3, 9);
 - `crates/syntax-tree/examples/engine_edits.rs`
   Apply edits through the engine session API and inspect revision metadata.
 - `crates/language/examples/runtime_registry.rs`
-  Load queries from explicit roots through the runtime registry layer.
+  Build a registry-backed multi-language loader and parse through it.
 - `crates/syntax-editor/examples/editor_viewport_manager.rs`
   Use the optional editor adapter for viewport selection and tile caching.
 - `crates/queries/examples/queries_tags.rs`

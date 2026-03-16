@@ -1,5 +1,9 @@
 use {
-	glorp_syntax_language::{GrammarLocator, LanguageId, LanguageRegistry, LanguageSpec, QueryLocator},
+	glorp_syntax_language::{
+		GrammarLocator, LanguageId, LanguageRegistry, LanguageSpec, QueryLocator, RegistryLanguageLoader,
+		grammar_search_paths,
+	},
+	glorp_syntax_tree::{DocumentSession, EngineConfig, StringText},
 	std::{
 		error::Error,
 		fs,
@@ -25,13 +29,32 @@ fn main() -> Result<(), Box<dyn Error>> {
 		"(identifier) @variable\n",
 	)?;
 
-	let mut registry = LanguageRegistry::new(GrammarLocator::default(), QueryLocator::new([query_root.clone()]));
-	registry.insert(LanguageSpec::new(LanguageId::new("rust"), "tree-sitter-rust"));
+	let mut registry = LanguageRegistry::new(
+		GrammarLocator::new(grammar_search_paths()),
+		QueryLocator::new([query_root.clone()]),
+	);
+	let mut rust = LanguageSpec::new(LanguageId::new("rust"), "tree-sitter-rust");
+	rust.injection_names.push("rs".to_owned());
+	registry.insert(rust);
 
-	let bundle = registry.query_bundle(&LanguageId::new("rust"))?;
-	assert_eq!(bundle.get("highlights"), Some("(identifier) @variable\n"));
+	let loader = RegistryLanguageLoader::from_registry(&registry)?;
+	let language = loader
+		.language(&LanguageId::new("rust"))
+		.expect("registered language should map to a numeric id");
+	let session = DocumentSession::new(
+		language,
+		&StringText::new("fn answer() -> i32 { 42 }\n"),
+		&loader,
+		EngineConfig::default(),
+	)?;
+	let snapshot = session.snapshot();
+	assert!(snapshot.named_node_at(3, 9).is_some());
 
-	println!("loaded query kinds={}", bundle.iter().count());
+	println!(
+		"loaded language {:?} revision={}",
+		loader.language_id(language),
+		snapshot.revision().0
+	);
 	fs::remove_dir_all(query_root)?;
 	Ok(())
 }

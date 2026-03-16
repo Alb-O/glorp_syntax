@@ -5,10 +5,11 @@ use {
 		injections_query::{InjectionLanguageMarker, InjectionsQuery},
 	},
 	regex::Regex,
-	std::sync::LazyLock,
+	std::{fmt, sync::LazyLock},
 	tree_sitter::{Grammar, query},
 };
 
+/// Parsed tree-sitter grammar and queries for one logical language.
 #[derive(Debug)]
 pub struct LanguageConfig {
 	pub grammar: Grammar,
@@ -39,6 +40,7 @@ impl LanguageConfig {
 	}
 }
 
+/// Minimal [`LanguageLoader`] implementation for a single language.
 #[derive(Debug)]
 pub struct SingleLanguageLoader {
 	language: Language,
@@ -93,27 +95,79 @@ impl SingleLanguageLoader {
 static INHERITS_REGEX: LazyLock<Regex> =
 	LazyLock::new(|| Regex::new(r";+\s*inherits\s*:?\s*([a-z_,()-]+)\s*").unwrap());
 
-/// reads a query by invoking `read_query_text`, handles any `inherits` directives
-pub fn read_query(language: &str, mut read_query_text: impl FnMut(&str) -> String) -> String {
-	fn read_query_impl(language: &str, read_query_text: &mut impl FnMut(&str) -> String) -> String {
-		let query = read_query_text(language);
-
-		// replaces all "; inherits <language>(,<language>)*" with the queries of the given language(s)
-		INHERITS_REGEX
-			.replace_all(&query, |captures: &regex::Captures| {
-				let mut output = String::new();
-				for language in captures[1].split(',') {
-					output.push('\n');
-					output.push_str(&read_query_impl(language, &mut *read_query_text));
-					output.push('\n');
-				}
-				output
-			})
-			.into_owned()
-	}
-	read_query_impl(language, &mut read_query_text)
+/// Errors produced while resolving a query and expanding `; inherits` directives.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReadQueryError<E> {
+	Read { language: Box<str>, source: E },
+	Cycle { chain: Vec<Box<str>> },
 }
 
+impl<E> fmt::Display for ReadQueryError<E>
+where
+	E: fmt::Display,
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::Read { language, source } => write!(f, "failed to read query for language {language}: {source}"),
+			Self::Cycle { chain } => {
+				let mut chain = chain.iter();
+				if let Some(first) = chain.next() {
+					f.write_str("cyclic query inherits: ")?;
+					f.write_str(first)?;
+				}
+				for language in chain {
+					write!(f, " -> {language}")?;
+				}
+				Ok(())
+			}
+		}
+	}
+}
+
+impl<E> std::error::Error for ReadQueryError<E> where E: std::error::Error + 'static {}
+
+/// Reads a query by invoking `read_query_text`, handling `inherits` directives recursively.
+pub fn read_query<E>(
+	language: &str, mut read_query_text: impl FnMut(&str) -> Result<String, E>,
+) -> Result<String, ReadQueryError<E>> {
+	fn read_query_impl<E>(
+		language: &str, read_query_text: &mut impl FnMut(&str) -> Result<String, E>, stack: &mut Vec<Box<str>>,
+	) -> Result<String, ReadQueryError<E>> {
+		if let Some(pos) = stack.iter().position(|current| current.as_ref() == language) {
+			let mut chain = stack[pos..].to_vec();
+			chain.push(language.into());
+			return Err(ReadQueryError::Cycle { chain });
+		}
+
+		stack.push(language.into());
+		let result = (|| {
+			let query = read_query_text(language).map_err(|source| ReadQueryError::Read {
+				language: language.into(),
+				source,
+			})?;
+			let mut output = String::with_capacity(query.len());
+			let mut offset = 0;
+			for captures in INHERITS_REGEX.captures_iter(&query) {
+				let matched = captures.get(0).expect("inherits capture should include full match");
+				output.push_str(&query[offset..matched.start()]);
+				for language in captures[1].split(',') {
+					output.push('\n');
+					output.push_str(&read_query_impl(language, read_query_text, stack)?);
+					output.push('\n');
+				}
+				offset = matched.end();
+			}
+			output.push_str(&query[offset..]);
+			Ok(output)
+		})();
+		stack.pop();
+		result
+	}
+
+	read_query_impl(language, &mut read_query_text, &mut Vec::new())
+}
+
+/// Resolves syntax configuration for the root language and injected languages.
 pub trait LanguageLoader {
 	fn language_for_marker(&self, marker: InjectionLanguageMarker) -> Option<Language>;
 	fn get_config(&self, lang: Language) -> Option<&LanguageConfig>;

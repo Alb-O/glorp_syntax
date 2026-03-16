@@ -3,8 +3,9 @@
 //! This crate provides the pieces needed to:
 //! - find and load compiled tree-sitter grammars
 //! - fetch grammar sources from git and build shared libraries
-//! - read query files with `; inherits` resolution
+//! - read query files with strict `; inherits` resolution
 //! - pin and fetch Helix runtime queries for build-time embedding
+//! - build a multi-language `LanguageLoader` from a runtime registry
 
 #[cfg(feature = "jit-grammars")]
 pub mod build;
@@ -12,6 +13,7 @@ pub mod bundle;
 pub mod grammar;
 #[cfg(feature = "helix-runtime")]
 pub mod helix;
+mod loader;
 pub mod query;
 pub mod registry;
 #[cfg(feature = "default-runtime-paths")]
@@ -33,7 +35,8 @@ pub use {
 		GrammarError, GrammarSource as LoadedGrammarSource, load_grammar_from_path, load_grammar_from_paths,
 		locate_grammar_library,
 	},
-	query::read_query_from_paths,
+	loader::{RegistryLanguageLoader, RegistryLanguageLoaderError},
+	query::{QueryReadError, read_optional_query_from_paths, read_query_from_paths},
 	registry::{GrammarLocator, LanguageId, LanguageRegistry, LanguageSpec, QueryLocator},
 };
 #[cfg(feature = "default-runtime-paths")]

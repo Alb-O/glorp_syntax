@@ -10,30 +10,32 @@ use {
 const FULL_TREE_MEMORY_CAP: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+/// Stable document key used by [`SyntaxManager`].
 pub struct DocumentId(pub u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Stable key identifying one viewport entry inside a document slot.
 pub struct ViewportKey(pub u32);
 
 #[derive(Debug, Clone)]
-pub struct InstalledSyntax {
-	pub syntax: Syntax,
-	pub doc_version: u64,
-	pub tree_id: u64,
+struct InstalledSyntax {
+	syntax: Syntax,
+	doc_version: u64,
+	tree_id: u64,
 }
 
 #[derive(Debug, Clone)]
-pub struct ViewportSyntax {
-	pub syntax: Syntax,
-	pub doc_version: u64,
-	pub tree_id: u64,
-	pub coverage: Range<u32>,
+struct ViewportSyntax {
+	syntax: Syntax,
+	doc_version: u64,
+	tree_id: u64,
+	coverage: Range<u32>,
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct ViewportEntry {
-	pub stage_a: Option<ViewportSyntax>,
-	pub stage_b: Option<ViewportSyntax>,
+struct ViewportEntry {
+	stage_a: Option<ViewportSyntax>,
+	stage_b: Option<ViewportSyntax>,
 }
 
 impl ViewportEntry {
@@ -61,10 +63,10 @@ struct FullTreeMemoryEntry {
 
 /// MRU cache of viewport-bounded parse results.
 #[derive(Debug, Clone)]
-pub struct ViewportCache {
+struct ViewportCache {
 	cap: usize,
 	order: VecDeque<ViewportKey>,
-	pub map: HashMap<ViewportKey, ViewportEntry>,
+	map: HashMap<ViewportKey, ViewportEntry>,
 }
 
 impl Default for ViewportCache {
@@ -103,10 +105,6 @@ impl ViewportCache {
 		self.map.entry(key).or_default()
 	}
 
-	pub fn touch(&mut self, key: ViewportKey) {
-		self.promote(key);
-	}
-
 	pub fn entries_mru(&self) -> impl Iterator<Item = &ViewportEntry> + '_ {
 		self.iter_keys_mru().filter_map(|key| self.map.get(&key))
 	}
@@ -127,13 +125,13 @@ impl ViewportCache {
 
 /// Per-document syntax state.
 #[derive(Debug, Default, Clone)]
-pub struct SyntaxSlot {
-	pub full: Option<InstalledSyntax>,
-	pub viewport_cache: ViewportCache,
-	pub dirty: bool,
-	pub updated: bool,
-	pub change_id: u64,
-	pub next_tree_id: u64,
+struct SyntaxSlot {
+	full: Option<InstalledSyntax>,
+	viewport_cache: ViewportCache,
+	dirty: bool,
+	updated: bool,
+	change_id: u64,
+	next_tree_id: u64,
 	full_tree_memory: VecDeque<FullTreeMemoryEntry>,
 }
 
@@ -236,51 +234,89 @@ impl ViewportCache {
 
 /// Best syntax tree selected for a render viewport.
 pub struct SyntaxSelection<'a> {
+	/// Syntax tree chosen for the requested viewport.
 	pub syntax: &'a Syntax,
+	/// Monotonic tree identifier assigned by [`SyntaxManager`].
 	pub tree_id: u64,
+	/// Document version associated with the selected tree.
 	pub tree_doc_version: u64,
+	/// Covered byte range for viewport-local trees. `None` for full-document trees.
 	pub coverage: Option<Range<u32>>,
 }
 
 #[derive(Debug, Default, Clone)]
+/// Per-document syntax registry with full-tree and viewport-tree selection.
 pub struct SyntaxManager {
 	entries: HashMap<DocumentId, SyntaxSlot>,
 }
 
 impl SyntaxManager {
+	/// Creates an empty syntax manager.
 	pub fn new() -> Self {
 		Self::default()
 	}
 
-	pub fn document(&self, doc_id: DocumentId) -> Option<&SyntaxSlot> {
+	fn document(&self, doc_id: DocumentId) -> Option<&SyntaxSlot> {
 		self.entries.get(&doc_id)
 	}
 
-	pub fn document_mut(&mut self, doc_id: DocumentId) -> &mut SyntaxSlot {
+	fn document_mut(&mut self, doc_id: DocumentId) -> &mut SyntaxSlot {
 		self.entries.entry(doc_id).or_default()
 	}
 
-	pub fn remove_document(&mut self, doc_id: DocumentId) -> Option<SyntaxSlot> {
-		self.entries.remove(&doc_id)
+	/// Removes all syntax state for `doc_id`.
+	pub fn remove_document(&mut self, doc_id: DocumentId) -> bool {
+		self.entries.remove(&doc_id).is_some()
 	}
 
+	/// Returns whether any full or viewport tree is installed for `doc_id`.
 	pub fn has_syntax(&self, doc_id: DocumentId) -> bool {
 		self.document(doc_id).is_some_and(SyntaxSlot::has_any_tree)
 	}
 
+	/// Returns whether the document has been marked dirty since the last full install.
 	pub fn is_dirty(&self, doc_id: DocumentId) -> bool {
 		self.document(doc_id).is_some_and(|slot| slot.dirty)
 	}
 
+	/// Marks the document as needing a fresh parse.
 	pub fn mark_dirty(&mut self, doc_id: DocumentId) {
 		let slot = self.document_mut(doc_id);
 		slot.dirty = true;
 	}
 
+	/// Returns and clears the per-document "updated" flag.
+	pub fn take_updated(&mut self, doc_id: DocumentId) -> bool {
+		self.document_mut(doc_id).take_updated()
+	}
+
+	pub fn drop_full(&mut self, doc_id: DocumentId) {
+		self.document_mut(doc_id).drop_full();
+	}
+
+	pub fn drop_viewports(&mut self, doc_id: DocumentId) {
+		self.document_mut(doc_id).drop_viewports();
+	}
+
+	pub fn drop_all_trees(&mut self, doc_id: DocumentId) {
+		self.document_mut(doc_id).drop_all_trees();
+	}
+
+	pub fn remember_full_tree_for_content(&mut self, doc_id: DocumentId, content: &Rope) {
+		self.document_mut(doc_id).remember_full_tree_for_content(content);
+	}
+
+	pub fn restore_full_tree_for_content(&mut self, doc_id: DocumentId, content: &Rope, doc_version: u64) -> bool {
+		self.document_mut(doc_id)
+			.restore_full_tree_for_content(content, doc_version)
+	}
+
+	/// Returns the manager-local change counter for `doc_id`.
 	pub fn syntax_version(&self, doc_id: DocumentId) -> u64 {
 		self.document(doc_id).map_or(0, |slot| slot.change_id)
 	}
 
+	/// Returns the best currently installed syntax tree for the document.
 	pub fn syntax_for_doc(&self, doc_id: DocumentId) -> Option<&Syntax> {
 		let slot = self.document(doc_id)?;
 		if let Some(full) = slot.full.as_ref() {
@@ -291,6 +327,7 @@ impl SyntaxManager {
 			.find_map(|entry| entry.stages().next().map(|(tree, _)| &tree.syntax))
 	}
 
+	/// Selects the best installed syntax tree for a render viewport.
 	pub fn syntax_for_viewport(
 		&self, doc_id: DocumentId, doc_version: u64, viewport: Range<u32>,
 	) -> Option<SyntaxSelection<'_>> {
@@ -333,10 +370,13 @@ impl SyntaxManager {
 		}
 
 		best_overlapping
+			// Prefer trees that actually cover the requested viewport, but fall back to the
+			// freshest installed tree so rendering can continue while viewport parses catch up.
 			.or(best_any)
 			.map(|(selection, _)| selection.into_selection())
 	}
 
+	/// Installs a full-document syntax tree.
 	pub fn install_full(&mut self, doc_id: DocumentId, syntax: Syntax, doc_version: u64) -> u64 {
 		let slot = self.document_mut(doc_id);
 		if slot
@@ -358,12 +398,14 @@ impl SyntaxManager {
 		slot.change_id
 	}
 
+	/// Installs the fast viewport parse for a viewport key.
 	pub fn install_viewport_stage_a(
 		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: Syntax, coverage: Range<u32>, doc_version: u64,
 	) -> u64 {
 		self.install_viewport(doc_id, key, syntax, coverage, doc_version, false)
 	}
 
+	/// Installs the enriched viewport parse for a viewport key.
 	pub fn install_viewport_stage_b(
 		&mut self, doc_id: DocumentId, key: ViewportKey, syntax: Syntax, coverage: Range<u32>, doc_version: u64,
 	) -> u64 {

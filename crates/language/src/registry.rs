@@ -2,12 +2,13 @@ use {
 	crate::{
 		bundle::{QueryBundle, load_query_bundle},
 		grammar::{GrammarError, load_grammar_from_paths},
-		query::read_query_from_paths,
+		query::{QueryReadError, read_optional_query_from_paths, read_query_from_paths},
 	},
 	glorp_syntax_tree::tree_sitter::Grammar,
 	std::{collections::BTreeMap, fmt, path::PathBuf},
 };
 
+/// Stable string identifier used by runtime registries and query bundles.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct LanguageId(String);
 
@@ -39,12 +40,21 @@ impl From<String> for LanguageId {
 	}
 }
 
+/// Runtime metadata for one language entry in a [`LanguageRegistry`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LanguageSpec {
 	pub id: LanguageId,
 	pub grammar_name: String,
 	pub grammar_paths: Vec<PathBuf>,
 	pub query_roots: Vec<PathBuf>,
+	/// Exact names accepted by `(#set! injection.language "...")`.
+	pub injection_names: Vec<String>,
+	/// Regex matchers used for document-content based injection markers.
+	pub content_regexes: Vec<String>,
+	/// Regex matchers used for filename-based injection markers.
+	pub filename_regexes: Vec<String>,
+	/// Regex matchers used for shebang-based injection markers.
+	pub shebang_regexes: Vec<String>,
 }
 
 impl LanguageSpec {
@@ -54,10 +64,15 @@ impl LanguageSpec {
 			grammar_name: grammar_name.into(),
 			grammar_paths: Vec::new(),
 			query_roots: Vec::new(),
+			injection_names: Vec::new(),
+			content_regexes: Vec::new(),
+			filename_regexes: Vec::new(),
+			shebang_regexes: Vec::new(),
 		}
 	}
 }
 
+/// Grammar search helper shared by runtime registries.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GrammarLocator {
 	search_paths: Vec<PathBuf>,
@@ -83,6 +98,7 @@ impl GrammarLocator {
 	}
 }
 
+/// Query-root search helper shared by runtime registries.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct QueryLocator {
 	roots: Vec<PathBuf>,
@@ -99,8 +115,12 @@ impl QueryLocator {
 		&self.roots
 	}
 
-	pub fn read_query(&self, language: &LanguageId, filename: &str) -> String {
+	pub fn read_query(&self, language: &LanguageId, filename: &str) -> Result<String, QueryReadError> {
 		read_query_from_paths(language.as_str(), filename, &self.roots)
+	}
+
+	pub fn read_optional_query(&self, language: &LanguageId, filename: &str) -> Result<Option<String>, QueryReadError> {
+		read_optional_query_from_paths(language.as_str(), filename, &self.roots)
 	}
 
 	pub fn bundle(&self, language: &LanguageId) -> std::io::Result<QueryBundle> {
@@ -108,6 +128,7 @@ impl QueryLocator {
 	}
 }
 
+/// Registry of language runtime metadata, grammar lookup, and query roots.
 #[derive(Debug, Clone, Default)]
 pub struct LanguageRegistry {
 	specs: BTreeMap<LanguageId, LanguageSpec>,
@@ -132,6 +153,11 @@ impl LanguageRegistry {
 		self.specs.get(id)
 	}
 
+	/// Iterates registry entries in deterministic key order.
+	pub fn iter(&self) -> impl Iterator<Item = (&LanguageId, &LanguageSpec)> {
+		self.specs.iter()
+	}
+
 	pub fn load_grammar(&self, id: &LanguageId) -> Result<Grammar, GrammarError> {
 		let spec = self
 			.language(id)
@@ -151,6 +177,30 @@ impl LanguageRegistry {
 			self.default_query_locator.bundle(id)
 		} else {
 			load_query_bundle(id.as_str(), &spec.query_roots)
+		}
+	}
+
+	pub fn read_query(&self, id: &LanguageId, filename: &str) -> Result<String, QueryReadError> {
+		let spec = self.language(id).ok_or_else(|| QueryReadError::RootNotFound {
+			language: id.to_string(),
+			filename: filename.to_owned(),
+		})?;
+		if spec.query_roots.is_empty() {
+			self.default_query_locator.read_query(id, filename)
+		} else {
+			read_query_from_paths(id.as_str(), filename, &spec.query_roots)
+		}
+	}
+
+	pub fn read_optional_query(&self, id: &LanguageId, filename: &str) -> Result<Option<String>, QueryReadError> {
+		let spec = self.language(id).ok_or_else(|| QueryReadError::RootNotFound {
+			language: id.to_string(),
+			filename: filename.to_owned(),
+		})?;
+		if spec.query_roots.is_empty() {
+			self.default_query_locator.read_optional_query(id, filename)
+		} else {
+			read_optional_query_from_paths(id.as_str(), filename, &spec.query_roots)
 		}
 	}
 }
