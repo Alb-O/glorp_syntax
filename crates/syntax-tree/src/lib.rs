@@ -197,7 +197,7 @@ impl Syntax {
 			let injection_at_start = layer.injection_at_byte_idx(start)?;
 
 			// +1 because the end is exclusive.
-			let injection_at_end = layer.injection_at_byte_idx(end + 1)?;
+			let injection_at_end = layer.injection_at_byte_idx(end.saturating_add(1))?;
 
 			(injection_at_start.layer == injection_at_end.layer).then(|| {
 				parent_injection_layer = injection_at_start.layer;

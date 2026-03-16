@@ -16,6 +16,7 @@ pub fn read_query_from_paths(lang: &str, filename: &str, roots: &[PathBuf]) -> S
 fn read_query_text(roots: &[PathBuf], query_lang: &str, filename: &str) -> String {
 	roots
 		.iter()
+		.rev()
 		.find_map(|root| std::fs::read_to_string(root.join(query_lang).join(filename)).ok())
 		.unwrap_or_default()
 }
@@ -60,5 +61,23 @@ mod tests {
 		assert!(query.contains("(type_identifier) @type"));
 
 		fs::remove_dir_all(root).expect("temp root should be removed");
+	}
+
+	#[test]
+	fn later_roots_override_earlier_query_files() {
+		let root_a = temp_root("override-a");
+		let root_b = temp_root("override-b");
+		fs::create_dir_all(root_a.join("rust")).expect("root a rust query dir should exist");
+		fs::create_dir_all(root_b.join("rust")).expect("root b rust query dir should exist");
+		fs::write(root_a.join("rust").join("highlights.scm"), "(identifier) @variable\n")
+			.expect("root a query should be written");
+		fs::write(root_b.join("rust").join("highlights.scm"), "(type_identifier) @type\n")
+			.expect("root b query should be written");
+
+		let query = read_query_from_paths("rust", "highlights.scm", &[root_a.clone(), root_b.clone()]);
+		assert_eq!(query, "(type_identifier) @type\n");
+
+		fs::remove_dir_all(root_a).expect("root a should be removed");
+		fs::remove_dir_all(root_b).expect("root b should be removed");
 	}
 }

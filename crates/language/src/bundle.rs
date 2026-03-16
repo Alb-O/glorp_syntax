@@ -48,10 +48,13 @@ impl QueryBundle {
 
 pub fn load_query_bundle(language: impl Into<LanguageId>, roots: &[PathBuf]) -> std::io::Result<QueryBundle> {
 	let language = language.into();
-	let mut bundle = QueryBundle::new(language.clone());
+	let mut bundle = QueryBundle {
+		language,
+		queries: BTreeMap::new(),
+	};
 
 	for root in roots {
-		let lang_dir = root.join(language.as_str());
+		let lang_dir = root.join(bundle.language.as_str());
 		if !lang_dir.is_dir() {
 			continue;
 		}

@@ -117,14 +117,14 @@ fn helix_runtime_dirs() -> Vec<PathBuf> {
 		.or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
 	{
 		let helix_runtime = config.join("helix").join("runtime");
-		if helix_runtime.exists() {
+		if helix_runtime.is_dir() {
 			push_unique(&mut dirs, helix_runtime);
 		}
 	}
 
 	if let Some(data) = data_local_dir() {
 		let helix_runtime = data.join("helix").join("runtime");
-		if helix_runtime.exists() {
+		if helix_runtime.is_dir() {
 			push_unique(&mut dirs, helix_runtime);
 		}
 	}

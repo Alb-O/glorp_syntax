@@ -108,7 +108,6 @@ pub fn fetch_grammar(grammar: &GrammarConfig) -> Result<FetchStatus> {
 	ensure_git_available()?;
 
 	let grammar_dir = grammar_sources_dir().join(&grammar.grammar_id);
-	fs::create_dir_all(&grammar_dir)?;
 
 	if is_valid_git_repo(&grammar_dir) {
 		update_existing_repo(&grammar_dir, &grammar.grammar_id, revision)

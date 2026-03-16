@@ -94,7 +94,7 @@ where
 	Loader: QueryLoader<'a>,
 	S: Default,
 {
-	fn init_layer(&mut self, injection: Injection) -> Box<ActiveLayer<'a, 'tree, S>> {
+	fn init_layer(&mut self, injection: &Injection) -> Box<ActiveLayer<'a, 'tree, S>> {
 		self.active_layers.remove(&injection.layer).unwrap_or_else(|| {
 			let layer = self.syntax.layer(injection.layer);
 			let start_point = injection.range.start.max(self.range.start);
@@ -169,7 +169,7 @@ where
 			finished_layers: HashSet::with_capacity(8),
 		});
 		Self {
-			current_layer: layer_manager.init_layer(injection.clone()),
+			current_layer: layer_manager.init_layer(&injection),
 			current_injection: injection,
 			layer_manager,
 		}
@@ -196,8 +196,8 @@ where
 	}
 
 	#[inline]
-	pub fn current_injection(&mut self) -> (Injection, &mut LayerState) {
-		(self.current_injection.clone(), &mut self.current_layer.state)
+	pub fn current_injection(&mut self) -> (&Injection, &mut LayerState) {
+		(&self.current_injection, &mut self.current_layer.state)
 	}
 
 	#[inline]
@@ -214,7 +214,7 @@ where
 	}
 
 	fn enter_injection(&mut self, injection: Injection) {
-		let active_layer = self.layer_manager.init_layer(injection.clone());
+		let active_layer = self.layer_manager.init_layer(&injection);
 		let old_injection = replace(&mut self.current_injection, injection);
 		let old_layer = replace(&mut self.current_layer, active_layer);
 		self.layer_manager.active_layers.insert(old_injection.layer, old_layer);

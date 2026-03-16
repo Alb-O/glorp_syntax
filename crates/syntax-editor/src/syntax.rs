@@ -1,8 +1,7 @@
 use {
 	crate::{HighlightSpans, Language, LanguageLoader, SealedSource, TreeCursor, tree_sitter::InputEdit},
 	glorp_syntax_tree::{
-		self as tree_house, ByteRangeText, ChangeSet, DocumentSession, EngineConfig, RopeText, TextEdit,
-		tree_sitter::Node,
+		self as tree_house, ChangeSet, DocumentSession, EngineConfig, RopeText, TextEdit, tree_sitter::Node,
 	},
 	ropey::RopeSlice,
 	std::{
@@ -107,9 +106,10 @@ impl Syntax {
 				sealed_source: sealed,
 			});
 		} else {
-			let text = RopeText::from_slice(source);
 			let change_set = ChangeSet::new(edits.iter().map(|edit| {
-				let replacement = text.byte_text(edit.start_byte..edit.new_end_byte);
+				let replacement = source
+					.byte_slice(edit.start_byte as usize..edit.new_end_byte as usize)
+					.to_string();
 				TextEdit::new(edit.start_byte..edit.old_end_byte, replacement)
 			}));
 			self.session.apply_edits(&change_set, loader)?;
