@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		.syntax_for_viewport(doc_id, 2, viewport_start..viewport_end)
 		.expect("viewport syntax should be selected");
 	let mut tiles = HighlightTiles::new();
-	let spans = tiles.get_spans(HighlightSpanQuery {
+	let spans = tiles.get_spans(&HighlightSpanQuery {
 		doc_id,
 		syntax_version: manager.syntax_version(doc_id),
 		rope: &rope,

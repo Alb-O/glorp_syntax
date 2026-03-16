@@ -67,9 +67,10 @@ impl TextObjectQuery {
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
 		let capture = self.query.get_capture(capture_name)?;
+		let root = snapshot.root_node();
 		Some(
 			snapshot
-				.capture_matches(&self.query, capture, snapshot.root_node())
+				.capture_matches(&self.query, capture, &root)
 				.filter_map(CapturedNode::from_nodes),
 		)
 	}
@@ -79,9 +80,10 @@ impl TextObjectQuery {
 		&'a self, capture_names: &[&str], snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = CapturedNode<'a>>> {
 		let capture = capture_names.iter().find_map(|name| self.query.get_capture(name))?;
+		let root = snapshot.root_node();
 		Some(
 			snapshot
-				.capture_matches(&self.query, capture, snapshot.root_node())
+				.capture_matches(&self.query, capture, &root)
 				.filter_map(CapturedNode::from_nodes),
 		)
 	}
@@ -151,9 +153,10 @@ impl TagQuery {
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.query.get_capture(capture_name)?;
+		let root = snapshot.root_node();
 		Some(
 			snapshot
-				.capture_matches(&self.query, capture, snapshot.root_node())
+				.capture_matches(&self.query, capture, &root)
 				.flat_map(|nodes| nodes.into_iter()),
 		)
 	}
@@ -195,9 +198,10 @@ impl RainbowQuery {
 		&'a self, capture_name: &str, snapshot: &'a DocumentSnapshot,
 	) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.query.get_capture(capture_name)?;
+		let root = snapshot.root_node();
 		Some(
 			snapshot
-				.capture_matches(&self.query, capture, snapshot.root_node())
+				.capture_matches(&self.query, capture, &root)
 				.flat_map(|nodes| nodes.into_iter()),
 		)
 	}
@@ -205,9 +209,10 @@ impl RainbowQuery {
 	/// Streams nodes captured as rainbow brackets.
 	pub fn bracket_nodes<'a>(&'a self, snapshot: &'a DocumentSnapshot) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.bracket_capture?;
+		let root = snapshot.root_node();
 		Some(
 			snapshot
-				.capture_matches(&self.query, capture, snapshot.root_node())
+				.capture_matches(&self.query, capture, &root)
 				.flat_map(|nodes| nodes.into_iter()),
 		)
 	}
@@ -215,9 +220,10 @@ impl RainbowQuery {
 	/// Streams nodes captured as rainbow scopes.
 	pub fn scope_nodes<'a>(&'a self, snapshot: &'a DocumentSnapshot) -> Option<impl Iterator<Item = Node<'a>>> {
 		let capture = self.scope_capture?;
+		let root = snapshot.root_node();
 		Some(
 			snapshot
-				.capture_matches(&self.query, capture, snapshot.root_node())
+				.capture_matches(&self.query, capture, &root)
 				.flat_map(|nodes| nodes.into_iter()),
 		)
 	}

@@ -437,7 +437,7 @@ impl Syntax {
 			}
 
 			let old_len = injections.len();
-			intersect_ranges(mat.include_children, mat.node, &parent_ranges, |range| {
+			intersect_ranges(mat.include_children, &mat.node, &parent_ranges, |range| {
 				layer_data.ranges.push(tree_sitter::Range {
 					start_point: tree_sitter::Point::ZERO,
 					end_point: tree_sitter::Point::ZERO,
@@ -452,6 +452,8 @@ impl Syntax {
 			});
 			if old_len != insert_position {
 				let inserted = injections.len() - old_len;
+				// `intersect_ranges` appends in local match order; rotate the newly appended block
+				// into the precedence-sorted slot we chose above.
 				injections[insert_position..].rotate_right(inserted);
 				layer_data.ranges[insert_position..].rotate_right(inserted);
 			}
@@ -587,7 +589,8 @@ impl Syntax {
 }
 
 fn intersect_ranges(
-	include_children: IncludedChildren, node: Node, parent_ranges: &[tree_sitter::Range], push_range: impl FnMut(Range),
+	include_children: IncludedChildren, node: &Node<'_>, parent_ranges: &[tree_sitter::Range],
+	push_range: impl FnMut(Range),
 ) {
 	let range = node.byte_range();
 	let i = parent_ranges.partition_point(|parent_range| parent_range.end_byte <= range.start);

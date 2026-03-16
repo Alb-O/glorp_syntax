@@ -100,8 +100,11 @@ fn read_query_text(roots: &[PathBuf], query_lang: &str, filename: &str) -> Resul
 		.iter()
 		.rev()
 		// Later roots override earlier ones, matching bundle loading precedence.
-		.map(|root| root.join(query_lang).join(filename))
-		.find(|path| path.exists())
+		.find_map(|root| {
+			// Build the candidate path only once so the existence check and returned value stay in sync.
+			let path = root.join(query_lang).join(filename);
+			path.exists().then_some(path)
+		})
 	else {
 		return Err(QueryFileError::NotFound {
 			language: query_lang.to_owned(),

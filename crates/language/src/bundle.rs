@@ -3,7 +3,7 @@ use {
 	std::{
 		collections::{BTreeMap, BTreeSet},
 		fs,
-		path::PathBuf,
+		path::{Path, PathBuf},
 	},
 	thiserror::Error,
 };
@@ -119,10 +119,7 @@ pub fn load_query_bundle(language: impl Into<LanguageId>, roots: &[PathBuf]) -> 
 /// roots by query kind.
 pub fn load_raw_query_bundle(language: impl Into<LanguageId>, roots: &[PathBuf]) -> std::io::Result<QueryBundle> {
 	let language = language.into();
-	let mut bundle = QueryBundle {
-		language,
-		queries: BTreeMap::new(),
-	};
+	let mut bundle = QueryBundle::new(language);
 
 	for root in roots {
 		let lang_dir = root.join(bundle.language.as_str());
@@ -177,7 +174,7 @@ fn collect_query_kinds(language: &LanguageId, roots: &[PathBuf]) -> Result<BTree
 	Ok(kinds)
 }
 
-fn collect_raw_files_sorted(dir: &PathBuf, extension: &str) -> std::io::Result<Vec<PathBuf>> {
+fn collect_raw_files_sorted(dir: &Path, extension: &str) -> std::io::Result<Vec<PathBuf>> {
 	let mut files = Vec::new();
 	for entry in fs::read_dir(dir)? {
 		let entry = entry?;

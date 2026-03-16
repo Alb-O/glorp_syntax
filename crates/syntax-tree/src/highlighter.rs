@@ -260,7 +260,7 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 			};
 			match query_event {
 				QueryIterEvent::EnterInjection(injection) => self.enter_injection(injection.layer),
-				QueryIterEvent::Match(node) => self.start_highlight(node, &mut first_highlight),
+				QueryIterEvent::Match(node) => self.start_highlight(&node, &mut first_highlight),
 				QueryIterEvent::ExitInjection { injection, state } => {
 					// `state` is returned if the layer is finished according to the `QueryIter`.
 					// The highlighter should only consider a layer finished, though, when it also
@@ -276,7 +276,7 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 					if layer_is_finished {
 						self.layer_states.remove(&injection.layer);
 					} else {
-						self.deactivate_layer(injection);
+						self.deactivate_layer(&injection);
 						refresh = true;
 					}
 					let active_language = self.query.syntax().layer(self.current_layer).language;
@@ -340,16 +340,18 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 		self.active_highlights.append(&mut state.dormant_highlights);
 	}
 
-	fn deactivate_layer(&mut self, injection: Injection) {
+	fn deactivate_layer(&mut self, injection: &Injection) {
 		let layer_data = self.layer_states.get_mut(&injection.layer).unwrap();
 		let parent_highlights = layer_data.parent_highlights.min(self.active_highlights.len());
+		// Combined injections can leave highlights alive past this specific range, so park them
+		// on the layer and reactivate them when the next segment of the same layer is entered.
 		layer_data
 			.dormant_highlights
 			.extend(self.active_highlights.drain(parent_highlights..));
 		self.process_highlight_end(injection.range.end);
 	}
 
-	fn start_highlight(&mut self, node: MatchedNode, first_highlight: &mut bool) {
+	fn start_highlight(&mut self, node: &MatchedNode<'_>, first_highlight: &mut bool) {
 		let range = node.node.byte_range();
 		// `<QueryIter as Iterator>::next` skips matches with empty ranges.
 		debug_assert!(!range.is_empty(), "QueryIter should not emit matches with empty ranges");

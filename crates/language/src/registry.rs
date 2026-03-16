@@ -5,7 +5,11 @@ use {
 		query::{QueryReadError, read_optional_query_from_paths, read_query_from_paths},
 	},
 	glorp_syntax_tree::tree_sitter::Grammar,
-	std::{collections::BTreeMap, fmt, path::PathBuf},
+	std::{
+		collections::{BTreeMap, btree_map::Entry},
+		fmt,
+		path::PathBuf,
+	},
 };
 
 /// Error returned when inserting a language whose [`LanguageId`] is already present.
@@ -173,11 +177,13 @@ impl LanguageRegistry {
 	/// Returns [`DuplicateLanguageIdError`] instead of silently replacing an
 	/// existing language entry.
 	pub fn insert(&mut self, spec: LanguageSpec) -> Result<(), DuplicateLanguageIdError> {
-		if self.specs.contains_key(&spec.id) {
-			return Err(DuplicateLanguageIdError { id: spec.id });
+		match self.specs.entry(spec.id.clone()) {
+			Entry::Vacant(entry) => {
+				entry.insert(spec);
+				Ok(())
+			}
+			Entry::Occupied(_) => Err(DuplicateLanguageIdError { id: spec.id }),
 		}
-		self.specs.insert(spec.id.clone(), spec);
-		Ok(())
 	}
 
 	/// Replaces the entry with the same [`LanguageId`], returning the previous spec if any.

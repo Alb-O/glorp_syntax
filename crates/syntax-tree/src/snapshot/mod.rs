@@ -23,10 +23,16 @@ impl<'a, 'tree> Iterator for CaptureMatches<'a, 'tree> {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		while let Some(query_match) = self.cursor.next_match() {
-			let group: Vec<_> = query_match.nodes_for_capture(self.capture).cloned().collect();
-			if !group.is_empty() {
-				return Some(group);
-			}
+			let mut nodes = query_match.nodes_for_capture(self.capture).cloned();
+			// Most matches do not contribute to every capture, so avoid allocating until we
+			// know this capture actually has at least one node.
+			let Some(first) = nodes.next() else {
+				continue;
+			};
+			let mut group = Vec::with_capacity(nodes.size_hint().0 + 1);
+			group.push(first);
+			group.extend(nodes);
+			return Some(group);
 		}
 		None
 	}
@@ -170,18 +176,20 @@ impl DocumentSnapshot {
 	}
 
 	pub fn matched_capture_nodes<'a>(
-		&'a self, query: &'a Query, capture: Capture, node: Node<'a>,
+		&'a self, query: &'a Query, capture: Capture, node: &Node<'a>,
 	) -> Vec<Vec<Node<'a>>> {
 		// Keep the old allocation-heavy helper for callers that want a collected result,
 		// but route it through the streaming implementation so semantics stay aligned.
 		self.capture_matches(query, capture, node).collect()
 	}
 
-	pub fn capture_matches<'a>(&'a self, query: &'a Query, capture: Capture, node: Node<'a>) -> CaptureMatches<'a, 'a> {
+	pub fn capture_matches<'a>(
+		&'a self, query: &'a Query, capture: Capture, node: &Node<'a>,
+	) -> CaptureMatches<'a, 'a> {
 		CaptureMatches {
 			cursor: InactiveQueryCursor::new(0..u32::MAX, TREE_SITTER_MATCH_LIMIT).execute_query(
 				query,
-				&node,
+				node,
 				RopeInput::new(self.rope_slice()),
 			),
 			capture,

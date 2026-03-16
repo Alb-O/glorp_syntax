@@ -139,7 +139,7 @@ impl<S> HighlightTiles<S> {
 	/// Tile boundaries are an internal cache detail; the returned spans are clipped to the
 	/// requested line range.
 	pub fn get_spans<Loader, Resolve>(
-		&mut self, q: HighlightSpanQuery<'_, Loader, Resolve, S>,
+		&mut self, q: &HighlightSpanQuery<'_, Loader, Resolve, S>,
 	) -> Vec<(HighlightSpan, S)>
 	where
 		Loader: LanguageLoader,
@@ -167,7 +167,7 @@ impl<S> HighlightTiles<S> {
 				theme_epoch: self.theme_epoch,
 				tile_idx,
 			};
-			let tile_index = self.get_or_build_tile_index(&q, key);
+			let tile_index = self.get_or_build_tile_index(q, key);
 			for (span, style) in &self.tiles[tile_index].spans {
 				let start = span.start.max(start_byte);
 				let end = span.end.min(end_byte);
