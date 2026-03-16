@@ -105,7 +105,9 @@ impl DocumentSession {
 		let changed_ranges = coalesce_sorted_ranges(normalized.iter().map(invalidated_range));
 
 		for edit in normalized.iter().rev() {
-			apply_edit(&mut text, edit)?;
+			// The cached char offsets were computed against the original rope. Because edits are
+			// sorted, non-overlapping, and applied back-to-front, those offsets stay valid here.
+			apply_edit(&mut text, edit);
 		}
 		if let Err(error) = syntax.update(text.slice(..), self.config.parse_timeout, &input_edits, loader) {
 			return match error {
@@ -149,43 +151,48 @@ impl DocumentSession {
 	}
 }
 
-fn apply_edit(text: &mut Rope, edit: &TextEdit) -> Result<(), Error> {
-	validate_edit(text, edit)?;
-	let start_char = text
-		.try_byte_to_char(edit.range.start as usize)
-		.map_err(|_| Error::InvalidRanges)?;
-	let end_char = text
-		.try_byte_to_char(edit.range.end as usize)
-		.map_err(|_| Error::InvalidRanges)?;
-	text.remove(start_char..end_char);
-	text.insert(start_char, &edit.replacement);
-	Ok(())
+#[derive(Debug, Clone)]
+struct NormalizedEdit {
+	text: TextEdit,
+	start_char: usize,
+	end_char: usize,
 }
 
-fn validate_edit(text: &Rope, edit: &TextEdit) -> Result<(), Error> {
-	if edit.range.start > edit.range.end || edit.range.end > text.len_bytes() as u32 {
+fn apply_edit(text: &mut Rope, edit: &NormalizedEdit) {
+	text.remove(edit.start_char..edit.end_char);
+	text.insert(edit.start_char, &edit.text.replacement);
+}
+
+fn validated_char_range(text: &Rope, range: &std::ops::Range<u32>) -> Result<(usize, usize), Error> {
+	if range.start > range.end || range.end > text.len_bytes() as u32 {
 		return Err(Error::InvalidRanges);
 	}
 
-	text.try_byte_to_char(edit.range.start as usize)
-		.map_err(|_| Error::InvalidRanges)?;
-	text.try_byte_to_char(edit.range.end as usize)
-		.map_err(|_| Error::InvalidRanges)?;
-	Ok(())
+	Ok((
+		text.try_byte_to_char(range.start as usize)
+			.map_err(|_| Error::InvalidRanges)?,
+		text.try_byte_to_char(range.end as usize)
+			.map_err(|_| Error::InvalidRanges)?,
+	))
 }
 
-fn normalize_edits(text: &Rope, edits: &ChangeSet) -> Result<Vec<TextEdit>, Error> {
+fn normalize_edits(text: &Rope, edits: &ChangeSet) -> Result<Vec<NormalizedEdit>, Error> {
 	let mut normalized = Vec::with_capacity(edits.iter().size_hint().0);
 	for edit in edits.iter() {
-		validate_edit(text, edit)?;
+		let (start_char, end_char) = validated_char_range(text, &edit.range)?;
 		if !byte_range_eq(text, edit.range.clone(), &edit.replacement) {
-			normalized.push(edit.clone());
+			normalized.push(NormalizedEdit {
+				text: edit.clone(),
+				start_char,
+				end_char,
+			});
 		}
 	}
-	normalized.sort_by_key(|edit| edit.range.start);
+	// Keep byte order canonical so overlap checks and reverse application can stay simple.
+	normalized.sort_by_key(|edit| edit.text.range.start);
 	if normalized
 		.windows(2)
-		.any(|pair| pair[0].range.end > pair[1].range.start)
+		.any(|pair| pair[0].text.range.end > pair[1].text.range.start)
 	{
 		return Err(Error::InvalidRanges);
 	}
@@ -201,9 +208,9 @@ fn byte_range_eq(text: &Rope, range: std::ops::Range<u32>, expected: &str) -> bo
 			.is_some_and(str::is_empty)
 }
 
-fn invalidated_range(edit: &TextEdit) -> std::ops::Range<u32> {
-	let new_end = edit.range.start + edit.replacement.len() as u32;
-	edit.range.start..edit.range.end.max(new_end)
+fn invalidated_range(edit: &NormalizedEdit) -> std::ops::Range<u32> {
+	let new_end = edit.text.range.start + edit.text.replacement.len() as u32;
+	edit.text.range.start..edit.text.range.end.max(new_end)
 }
 
 fn coalesce_sorted_ranges(ranges: impl IntoIterator<Item = std::ops::Range<u32>>) -> Vec<std::ops::Range<u32>> {
@@ -221,10 +228,10 @@ fn coalesce_sorted_ranges(ranges: impl IntoIterator<Item = std::ops::Range<u32>>
 	merged
 }
 
-fn build_input_edit(text: &Rope, edit: &TextEdit) -> InputEdit {
-	let start_byte = edit.range.start;
-	let old_end_byte = edit.range.end;
-	let new_end_byte = start_byte + edit.replacement.len() as u32;
+fn build_input_edit(text: &Rope, edit: &NormalizedEdit) -> InputEdit {
+	let start_byte = edit.text.range.start;
+	let old_end_byte = edit.text.range.end;
+	let new_end_byte = start_byte + edit.text.replacement.len() as u32;
 	let start_point = point_for_byte(text, start_byte);
 
 	InputEdit {
@@ -233,7 +240,7 @@ fn build_input_edit(text: &Rope, edit: &TextEdit) -> InputEdit {
 		new_end_byte,
 		start_point,
 		old_end_point: point_for_byte(text, old_end_byte),
-		new_end_point: point_after_insert(start_point, &edit.replacement),
+		new_end_point: point_after_insert(start_point, &edit.text.replacement),
 	}
 }
 

@@ -59,12 +59,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let selection = manager
 		.syntax_for_viewport(doc_id, 2, viewport_start..viewport_end)
 		.expect("viewport syntax should be selected");
+	let tree_id = selection.tree_id();
 	let mut tiles = HighlightTiles::new();
 	let spans = tiles.get_spans(&HighlightSpanQuery {
 		doc_id,
 		syntax_version: manager.syntax_version(doc_id),
 		rope: &rope,
-		selection: selection.clone(),
+		selection,
 		loader: &loader,
 		style_resolver: Highlight::get,
 		start_line: rope.byte_to_line(viewport_start as usize),
@@ -72,6 +73,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 	});
 
 	assert!(spans.iter().any(|(_, style)| *style == 4));
-	println!("selected tree={} cached spans={}", selection.tree_id(), spans.len());
+	println!("selected tree={tree_id} cached spans={}", spans.len());
 	Ok(())
 }

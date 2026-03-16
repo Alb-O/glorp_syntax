@@ -46,10 +46,6 @@ impl ViewportEntry {
 			.chain(self.stage_a.iter().map(|tree| (tree, false)))
 	}
 
-	fn has_any(&self) -> bool {
-		self.stage_a.is_some() || self.stage_b.is_some()
-	}
-
 	fn best_doc_version(&self) -> Option<u64> {
 		self.stages().map(|(tree, _)| tree.doc_version).max()
 	}
@@ -107,7 +103,8 @@ impl ViewportCache {
 	}
 
 	pub fn entries_mru(&self) -> impl Iterator<Item = &ViewportEntry> + '_ {
-		self.iter_keys_mru().filter_map(|key| self.map.get(&key))
+		self.iter_keys_mru()
+			.map(|key| self.map.get(&key).expect("viewport order and map must stay in sync"))
 	}
 
 	pub fn clear(&mut self) {
@@ -116,7 +113,9 @@ impl ViewportCache {
 	}
 
 	pub fn has_any(&self) -> bool {
-		self.map.values().any(ViewportEntry::has_any)
+		// Entries only appear via `get_mut_or_insert` immediately before a stage is populated,
+		// so an empty map is equivalent to "no viewport trees installed".
+		!self.map.is_empty()
 	}
 
 	pub fn best_doc_version(&self) -> Option<u64> {
@@ -206,6 +205,12 @@ struct SyntaxSlot {
 }
 
 impl SyntaxSlot {
+	fn full_tree_memory_pos(&self, content: &Rope, compatibility_key: u64) -> Option<usize> {
+		self.full_tree_memory
+			.iter()
+			.position(|entry| entry.content == *content && entry.compatibility_key == compatibility_key)
+	}
+
 	pub fn take_updated(&mut self) -> bool {
 		let updated = self.updated;
 		self.updated = false;
@@ -245,19 +250,13 @@ impl SyntaxSlot {
 		let Some(full) = self.full.as_ref() else {
 			return;
 		};
-		if self
-			.full_tree_memory
-			.front()
-			.is_some_and(|entry| entry.content == *content && entry.compatibility_key == compatibility_key)
-		{
-			return;
-		}
-		if let Some(pos) = self
-			.full_tree_memory
-			.iter()
-			.position(|entry| entry.content == *content && entry.compatibility_key == compatibility_key)
-		{
-			self.full_tree_memory.remove(pos);
+		match self.full_tree_memory_pos(content, compatibility_key) {
+			Some(0) => return,
+			Some(pos) => {
+				// Refresh recency without duplicating an existing content-compatible snapshot.
+				self.full_tree_memory.remove(pos);
+			}
+			None => {}
 		}
 		if self.full_tree_memory.len() >= FULL_TREE_MEMORY_CAP {
 			self.full_tree_memory.pop_back();
@@ -270,11 +269,7 @@ impl SyntaxSlot {
 	}
 
 	pub fn restore_full_tree_for_content(&mut self, content: &Rope, compatibility_key: u64, doc_version: u64) -> bool {
-		let Some(pos) = self
-			.full_tree_memory
-			.iter()
-			.position(|entry| entry.content == *content && entry.compatibility_key == compatibility_key)
-		else {
+		let Some(pos) = self.full_tree_memory_pos(content, compatibility_key) else {
 			return false;
 		};
 		let remembered = self

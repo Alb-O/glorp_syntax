@@ -33,7 +33,7 @@ pub fn cache_dir() -> Option<PathBuf> {
 }
 
 pub fn grammar_search_paths() -> Vec<PathBuf> {
-	let mut dirs = Vec::new();
+	let mut dirs = Vec::with_capacity(8);
 
 	if let Ok(runtime) = std::env::var("GLORP_SYNTAX_RUNTIME") {
 		push_unique(&mut dirs, PathBuf::from(runtime).join("grammars"));
@@ -70,7 +70,7 @@ pub fn grammar_search_paths() -> Vec<PathBuf> {
 }
 
 pub fn query_search_paths() -> Vec<PathBuf> {
-	let mut dirs = Vec::new();
+	let mut dirs = Vec::with_capacity(4);
 
 	if let Ok(runtime) = std::env::var("GLORP_SYNTAX_RUNTIME") {
 		push_unique(&mut dirs, PathBuf::from(runtime).join("queries"));
@@ -105,7 +105,7 @@ fn data_local_dir() -> Option<PathBuf> {
 }
 
 fn helix_runtime_dirs() -> Vec<PathBuf> {
-	let mut dirs = Vec::new();
+	let mut dirs = Vec::with_capacity(3);
 
 	if let Ok(runtime) = std::env::var("HELIX_RUNTIME") {
 		push_unique(&mut dirs, PathBuf::from(runtime));

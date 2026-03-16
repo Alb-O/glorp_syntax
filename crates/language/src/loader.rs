@@ -314,17 +314,17 @@ fn check_exact_names(
 fn compile_regexes(
 	id: &LanguageId, matcher_kind: &'static str, patterns: &[String],
 ) -> Result<Vec<Regex>, RegistryLanguageLoaderError> {
-	let mut compiled = Vec::with_capacity(patterns.len());
-	for pattern in patterns {
-		let regex = Regex::new(pattern).map_err(|source| RegistryLanguageLoaderError::InvalidRegex {
-			language: id.clone(),
-			matcher_kind,
-			pattern: pattern.clone(),
-			source,
-		})?;
-		compiled.push(regex);
-	}
-	Ok(compiled)
+	patterns
+		.iter()
+		.map(|pattern| {
+			Regex::new(pattern).map_err(|source| RegistryLanguageLoaderError::InvalidRegex {
+				language: id.clone(),
+				matcher_kind,
+				pattern: pattern.clone(),
+				source,
+			})
+		})
+		.collect()
 }
 
 fn longest_regex_match(matchers: &[RegexMatcher], text: &str) -> Option<Language> {

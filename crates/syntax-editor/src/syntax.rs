@@ -363,8 +363,9 @@ mod tests {
 	fn viewport_update_tracks_shifted_base_offset() {
 		let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).expect("rust grammar should load");
 		let loader = SingleLanguageLoader::from_queries(grammar, "", "", "").expect("loader should build");
-		let mut rope = Rope::from_str("const before = 1;\nfn alpha() {}\n");
-		let viewport_start = rope.to_string().find("fn alpha").expect("viewport start should exist") as u32;
+		let source = "const before = 1;\nfn alpha() {}\n";
+		let mut rope = Rope::from_str(source);
+		let viewport_start = source.find("fn alpha").expect("viewport start should exist") as u32;
 		let viewport_end = rope.len_bytes() as u32;
 		let sealed = Arc::new(SealedSource::from_byte_range_with_newline_padding(
 			rope.slice(..),

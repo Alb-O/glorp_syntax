@@ -98,7 +98,7 @@ impl DocumentSnapshot {
 	}
 
 	pub fn byte_text(&self, range: std::ops::Range<u32>) -> String {
-		self.text().byte_text(range)
+		self.text.byte_text(range)
 	}
 
 	pub fn tree(&self) -> &Tree {

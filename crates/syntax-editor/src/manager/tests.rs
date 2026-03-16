@@ -47,14 +47,15 @@ fn candidate_score_prefers_exact_full_then_enriched() {
 fn syntax_manager_tracks_updates_for_installed_documents() {
 	let mut manager = SyntaxManager::new();
 	let doc_id = DocumentId(17);
+	let content = Rope::from_str("fn alpha() {}\n");
 
 	assert!(!manager.take_updated(doc_id));
 	assert!(!manager.has_syntax(doc_id));
 	manager.install_full(doc_id, rust_syntax("fn alpha() {}\n"), 1);
 	assert!(manager.take_updated(doc_id));
 	assert!(!manager.take_updated(doc_id));
-	manager.remember_full_tree_for_content(doc_id, &Rope::from_str("fn alpha() {}\n"), 7);
-	assert!(manager.restore_full_tree_for_content(doc_id, &Rope::from_str("fn alpha() {}\n"), 7, 2));
+	manager.remember_full_tree_for_content(doc_id, &content, 7);
+	assert!(manager.restore_full_tree_for_content(doc_id, &content, 7, 2));
 	assert!(manager.take_updated(doc_id));
 }
 
@@ -62,14 +63,15 @@ fn syntax_manager_tracks_updates_for_installed_documents() {
 fn miss_paths_do_not_create_document_slots() {
 	let mut manager = SyntaxManager::new();
 	let doc_id = DocumentId(88);
+	let content = Rope::from_str("fn alpha() {}\n");
 
 	manager.mark_dirty(doc_id);
 	assert!(!manager.take_updated(doc_id));
 	manager.drop_full(doc_id);
 	manager.drop_viewports(doc_id);
 	manager.drop_all_trees(doc_id);
-	manager.remember_full_tree_for_content(doc_id, &Rope::from_str("fn alpha() {}\n"), 7);
-	assert!(!manager.restore_full_tree_for_content(doc_id, &Rope::from_str("fn alpha() {}\n"), 7, 1));
+	manager.remember_full_tree_for_content(doc_id, &content, 7);
+	assert!(!manager.restore_full_tree_for_content(doc_id, &content, 7, 1));
 	assert!(!manager.has_syntax(doc_id));
 	assert_eq!(manager.syntax_version(doc_id), 0);
 	assert!(!manager.remove_document(doc_id));
