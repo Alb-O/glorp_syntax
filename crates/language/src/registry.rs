@@ -1,6 +1,6 @@
 use {
 	crate::{
-		bundle::{QueryBundle, load_query_bundle},
+		bundle::{QueryBundle, QueryBundleError, load_query_bundle, load_raw_query_bundle},
 		grammar::{GrammarError, load_grammar_from_paths},
 		query::{QueryReadError, read_optional_query_from_paths, read_query_from_paths},
 	},
@@ -137,8 +137,17 @@ impl QueryLocator {
 		read_optional_query_from_paths(language.as_str(), filename, &self.roots)
 	}
 
-	pub fn bundle(&self, language: &LanguageId) -> std::io::Result<QueryBundle> {
+	/// Loads the resolved query bundle for `language`.
+	///
+	/// This is equivalent to calling [`load_query_bundle`](crate::load_query_bundle)
+	/// with this locator's roots.
+	pub fn bundle(&self, language: &LanguageId) -> Result<QueryBundle, QueryBundleError> {
 		load_query_bundle(language.as_str(), &self.roots)
+	}
+
+	/// Loads the raw on-disk query bundle for `language` without resolving `; inherits`.
+	pub fn raw_bundle(&self, language: &LanguageId) -> std::io::Result<QueryBundle> {
+		load_raw_query_bundle(language.as_str(), &self.roots)
 	}
 }
 
@@ -198,15 +207,32 @@ impl LanguageRegistry {
 		}
 	}
 
-	/// Loads and merges the available query files for `id`.
-	pub fn query_bundle(&self, id: &LanguageId) -> std::io::Result<QueryBundle> {
+	/// Loads and merges the available resolved query files for `id`.
+	///
+	/// Query text is returned after `; inherits` expansion.
+	pub fn query_bundle(&self, id: &LanguageId) -> Result<QueryBundle, QueryBundleError> {
 		let spec = self
 			.language(id)
-			.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("language not found: {id}")))?;
+			.ok_or_else(|| QueryBundleError::LanguageNotFound { language: id.clone() })?;
 		if spec.query_roots.is_empty() {
 			self.default_query_locator.bundle(id)
 		} else {
 			load_query_bundle(id.as_str(), &spec.query_roots)
+		}
+	}
+
+	/// Loads and merges the available raw query files for `id` without resolving `; inherits`.
+	///
+	/// Prefer [`Self::query_bundle`] unless the caller explicitly needs the
+	/// on-disk query text.
+	pub fn raw_query_bundle(&self, id: &LanguageId) -> std::io::Result<QueryBundle> {
+		let spec = self
+			.language(id)
+			.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("language not found: {id}")))?;
+		if spec.query_roots.is_empty() {
+			self.default_query_locator.raw_bundle(id)
+		} else {
+			load_raw_query_bundle(id.as_str(), &spec.query_roots)
 		}
 	}
 
@@ -305,5 +331,31 @@ mod tests {
 				.map(|spec| spec.grammar_name.as_str()),
 			Some("tree-sitter-rust-alt")
 		);
+	}
+
+	#[test]
+	fn raw_bundle_preserves_unresolved_query_text() {
+		let root = temp_root("raw-queries");
+		let base_dir = root.join("base");
+		let rust_dir = root.join("rust");
+		fs::create_dir_all(&base_dir).expect("base dir should exist");
+		fs::create_dir_all(&rust_dir).expect("rust dir should exist");
+		fs::write(base_dir.join("highlights.scm"), "(identifier) @variable\n").expect("base query should be written");
+		fs::write(
+			rust_dir.join("highlights.scm"),
+			"; inherits base\n(type_identifier) @type\n",
+		)
+		.expect("rust query should be written");
+
+		let locator = QueryLocator::new([root.clone()]);
+		let bundle = locator
+			.raw_bundle(&LanguageId::new("rust"))
+			.expect("raw query bundle should load");
+		assert_eq!(
+			bundle.get("highlights"),
+			Some("; inherits base\n(type_identifier) @type\n")
+		);
+
+		fs::remove_dir_all(root).expect("root should be removed");
 	}
 }

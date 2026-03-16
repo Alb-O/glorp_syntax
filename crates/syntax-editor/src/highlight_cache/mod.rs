@@ -10,10 +10,16 @@ pub const TILE_SIZE: usize = 128;
 const MAX_TILES: usize = 16;
 
 /// Cache key for a highlight tile.
+///
+/// Highlight tiles are scoped not just to a document and syntax version, but
+/// also to the selected tree. This prevents viewport trees for different
+/// regions from aliasing inside one document cache.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HighlightKey {
 	/// Syntax-manager version used to invalidate tiles after tree changes.
 	pub syntax_version: u64,
+	/// Selected syntax tree identifier used to distinguish concurrent viewport trees.
+	pub tree_id: u64,
 	/// Theme/version token used to invalidate tiles after style changes.
 	pub theme_epoch: u64,
 	/// Zero-based tile index in `TILE_SIZE` line units.
@@ -42,6 +48,8 @@ where
 	/// Full document text used for line-to-byte conversion.
 	pub rope: &'a Rope,
 	/// Render selection to highlight against.
+	///
+	/// Its `tree_id` is folded into the tile cache key automatically.
 	pub selection: RenderSyntaxSelection<'a>,
 	/// Language/query loader used by the selected syntax tree.
 	pub loader: &'a Loader,
@@ -54,12 +62,15 @@ where
 }
 
 /// LRU cache for syntax highlight tiles.
+///
+/// Cached tiles are partitioned by document, selected tree, tile index, and
+/// theme epoch.
 #[derive(Debug)]
 pub struct HighlightTiles<S> {
 	tiles: Vec<HighlightTile<S>>,
 	mru_order: VecDeque<usize>,
 	max_tiles: usize,
-	index: HashMap<DocumentId, HashMap<usize, usize>>,
+	index: HashMap<DocumentId, HashMap<(u64, usize), usize>>,
 	theme_epoch: u64,
 }
 
@@ -108,6 +119,8 @@ impl<S> HighlightTiles<S> {
 	}
 
 	/// Invalidates every cached tile associated with `doc_id`.
+	///
+	/// This drops tiles for every cached tree selection under the document.
 	pub fn invalidate_document(&mut self, doc_id: DocumentId) {
 		let Some(indices) = self.index.remove(&doc_id) else {
 			return;
@@ -150,10 +163,11 @@ impl<S> HighlightTiles<S> {
 		for tile_idx in start_tile..=end_tile {
 			let key = HighlightKey {
 				syntax_version: q.syntax_version,
+				tree_id: q.selection.tree_id(),
 				theme_epoch: self.theme_epoch,
 				tile_idx,
 			};
-			let tile_index = self.get_or_build_tile_index(&q, tile_idx, key);
+			let tile_index = self.get_or_build_tile_index(&q, key);
 			for (span, style) in &self.tiles[tile_index].spans {
 				let start = span.start.max(start_byte);
 				let end = span.end.min(end_byte);
@@ -174,21 +188,24 @@ impl<S> HighlightTiles<S> {
 	}
 
 	fn get_or_build_tile_index<Loader, Resolve>(
-		&mut self, q: &HighlightSpanQuery<'_, Loader, Resolve, S>, tile_idx: usize, key: HighlightKey,
+		&mut self, q: &HighlightSpanQuery<'_, Loader, Resolve, S>, key: HighlightKey,
 	) -> usize
 	where
 		Loader: LanguageLoader,
 		Resolve: Fn(Highlight) -> S,
 		S: Copy, {
-		if let Some(&idx) = self.index.get(&q.doc_id).and_then(|doc| doc.get(&tile_idx))
+		// `syntax_version` and `theme_epoch` still live in `HighlightKey`, but
+		// tree identity has to be part of the lookup key to avoid cross-viewport aliasing.
+		let lookup = (key.tree_id, key.tile_idx);
+		if let Some(&idx) = self.index.get(&q.doc_id).and_then(|doc| doc.get(&lookup))
 			&& self.tiles[idx].key == key
 		{
 			self.touch(idx);
 			return idx;
 		}
 
-		let tile_start_line = tile_idx * TILE_SIZE;
-		let tile_end_line = ((tile_idx + 1) * TILE_SIZE).min(q.rope.len_lines());
+		let tile_start_line = key.tile_idx * TILE_SIZE;
+		let tile_end_line = ((key.tile_idx + 1) * TILE_SIZE).min(q.rope.len_lines());
 		let spans = build_tile_spans(
 			q.rope,
 			&q.selection,
@@ -197,7 +214,7 @@ impl<S> HighlightTiles<S> {
 			tile_start_line,
 			tile_end_line,
 		);
-		self.insert_tile(q.doc_id, tile_idx, HighlightTile { key, spans })
+		self.insert_tile(q.doc_id, HighlightTile { key, spans })
 	}
 
 	fn touch(&mut self, idx: usize) {
@@ -210,11 +227,12 @@ impl<S> HighlightTiles<S> {
 		}
 	}
 
-	fn insert_tile(&mut self, doc_id: DocumentId, tile_idx: usize, tile: HighlightTile<S>) -> usize {
-		if let Some(existing_idx) = self.take_tile_index(doc_id, tile_idx) {
+	fn insert_tile(&mut self, doc_id: DocumentId, tile: HighlightTile<S>) -> usize {
+		let lookup = (tile.key.tree_id, tile.key.tile_idx);
+		if let Some(existing_idx) = self.take_tile_index(doc_id, lookup) {
 			self.tiles[existing_idx] = tile;
 			self.touch(existing_idx);
-			self.index.entry(doc_id).or_default().insert(tile_idx, existing_idx);
+			self.index.entry(doc_id).or_default().insert(lookup, existing_idx);
 			return existing_idx;
 		}
 
@@ -227,22 +245,22 @@ impl<S> HighlightTiles<S> {
 			});
 			self.tiles[evicted_idx] = tile;
 			self.mru_order.push_front(evicted_idx);
-			self.index.entry(doc_id).or_default().insert(tile_idx, evicted_idx);
+			self.index.entry(doc_id).or_default().insert(lookup, evicted_idx);
 			return evicted_idx;
 		}
 
 		let idx = self.tiles.len();
 		self.tiles.push(tile);
 		self.mru_order.push_front(idx);
-		self.index.entry(doc_id).or_default().insert(tile_idx, idx);
+		self.index.entry(doc_id).or_default().insert(lookup, idx);
 		idx
 	}
 
-	fn take_tile_index(&mut self, doc_id: DocumentId, tile_idx: usize) -> Option<usize> {
+	fn take_tile_index(&mut self, doc_id: DocumentId, lookup: (u64, usize)) -> Option<usize> {
 		let idx = self
 			.index
 			.get_mut(&doc_id)
-			.and_then(|doc_tiles| doc_tiles.remove(&tile_idx));
+			.and_then(|doc_tiles| doc_tiles.remove(&lookup));
 		if self.index.get(&doc_id).is_some_and(HashMap::is_empty) {
 			self.index.remove(&doc_id);
 		}

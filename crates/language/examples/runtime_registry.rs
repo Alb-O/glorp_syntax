@@ -41,8 +41,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 	assert!(report.issues.is_empty(), "example registry should load cleanly");
 	let loader = report.loader;
 	let language = loader
-		.language(&LanguageId::new("rust"))
-		.expect("registered language should map to a numeric id");
+		.language_for_filename("main.rs")
+		.expect("filename matcher should resolve rust");
 	let session = DocumentSession::new(
 		language,
 		&StringText::new("fn answer() -> i32 { 42 }\n"),

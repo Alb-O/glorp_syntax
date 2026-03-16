@@ -14,7 +14,8 @@ use {
 /// [`LanguageLoader`] implementation backed by a [`LanguageRegistry`].
 ///
 /// This is the preferred integration surface for editors that need multiple
-/// languages, runtime query loading, and injection resolution.
+/// languages, runtime query loading, root-language detection, and injection
+/// resolution.
 #[derive(Debug)]
 pub struct RegistryLanguageLoader {
 	languages: Vec<LoadedLanguage>,
@@ -134,8 +135,40 @@ impl RegistryLanguageLoader {
 	}
 
 	/// Returns the loader-scoped engine language token for a registry language ID.
+	///
+	/// Use this when the caller already knows the registry language ID and needs
+	/// the corresponding engine token.
 	pub fn language(&self, id: &LanguageId) -> Option<Language> {
 		self.languages_by_id.get(id).copied()
+	}
+
+	/// Detects a root language from an exact language or alias name.
+	///
+	/// This is intended for root document detection. Injection queries should
+	/// continue to use [`LanguageLoader::language_for_marker`].
+	pub fn language_for_name(&self, name: &str) -> Option<Language> {
+		self.exact_names.get(name).map(|matcher| matcher.language)
+	}
+
+	/// Detects a root language by matching filename regexes against `filename`.
+	///
+	/// The input is matched as provided; callers should decide whether to pass a
+	/// basename or a full path.
+	pub fn language_for_filename(&self, filename: &str) -> Option<Language> {
+		longest_regex_match(&self.filename_regexes, filename)
+	}
+
+	/// Detects a root language by matching shebang regexes against `shebang`.
+	pub fn language_for_shebang(&self, shebang: &str) -> Option<Language> {
+		longest_regex_match(&self.shebang_regexes, shebang)
+	}
+
+	/// Detects a root language by matching content regexes against `content`.
+	///
+	/// This is typically useful for fenced-code markers or other content-driven
+	/// language detection paths in editors.
+	pub fn language_for_content(&self, content: &str) -> Option<Language> {
+		longest_regex_match(&self.content_regexes, content)
 	}
 
 	/// Returns the registry language ID for a loader-scoped engine language token.
@@ -198,17 +231,11 @@ impl RegistryLanguageLoader {
 impl LanguageLoader for RegistryLanguageLoader {
 	fn language_for_marker(&self, marker: InjectionLanguageMarker) -> Option<Language> {
 		match marker {
-			InjectionLanguageMarker::Name(name) => self.exact_names.get(name).map(|matcher| matcher.language),
+			InjectionLanguageMarker::Name(name) => self.language_for_name(name),
 			// `RopeSlice` can often stay borrowed here; `Cow` only allocates when the slice spans chunks.
-			InjectionLanguageMarker::Match(text) => {
-				longest_regex_match(&self.content_regexes, Cow::<str>::from(text).as_ref())
-			}
-			InjectionLanguageMarker::Filename(text) => {
-				longest_regex_match(&self.filename_regexes, Cow::<str>::from(text).as_ref())
-			}
-			InjectionLanguageMarker::Shebang(text) => {
-				longest_regex_match(&self.shebang_regexes, Cow::<str>::from(text).as_ref())
-			}
+			InjectionLanguageMarker::Match(text) => self.language_for_content(Cow::<str>::from(text).as_ref()),
+			InjectionLanguageMarker::Filename(text) => self.language_for_filename(Cow::<str>::from(text).as_ref()),
+			InjectionLanguageMarker::Shebang(text) => self.language_for_shebang(Cow::<str>::from(text).as_ref()),
 		}
 	}
 
@@ -443,6 +470,10 @@ mod tests {
 		let shebang = Rope::from_str("#!/usr/bin/env cargo");
 		assert_eq!(loader.language(&LanguageId::new("rust")), Some(language));
 		assert_eq!(loader.language_id(language).map(LanguageId::as_str), Some("rust"));
+		assert_eq!(loader.language_for_name("rs"), Some(language));
+		assert_eq!(loader.language_for_content("```rust"), Some(language));
+		assert_eq!(loader.language_for_filename("main.rs"), Some(language));
+		assert_eq!(loader.language_for_shebang("#!/usr/bin/env cargo"), Some(language));
 		assert_eq!(
 			loader.language_for_marker(InjectionLanguageMarker::Name("rs")),
 			Some(language)

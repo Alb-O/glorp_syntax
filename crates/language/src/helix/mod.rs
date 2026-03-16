@@ -76,7 +76,7 @@ pub fn ensure_helix_queries_checkout(cache_root: &Path, lock: &HelixRuntimeLock)
 /// earlier roots by query kind.
 pub fn merge_language_queries(
 	language: &str, roots: &[PathBuf],
-) -> std::io::Result<std::collections::BTreeMap<String, String>> {
+) -> Result<std::collections::BTreeMap<String, String>, crate::bundle::QueryBundleError> {
 	load_query_bundle(language, roots).map(crate::bundle::QueryBundle::into_queries)
 }
 

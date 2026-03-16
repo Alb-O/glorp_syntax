@@ -4,8 +4,10 @@
 //! - find and load compiled tree-sitter grammars
 //! - fetch grammar sources from git and build shared libraries
 //! - read query files with strict `; inherits` resolution
+//! - load query bundles either resolved (default) or raw
 //! - pin and fetch Helix runtime queries for build-time embedding
 //! - build a multi-language `LanguageLoader` from a runtime registry
+//! - detect root languages from editor-facing inputs such as filenames and shebangs
 
 #[cfg(feature = "jit-grammars")]
 pub mod build;
@@ -30,7 +32,7 @@ pub use {
 	grammar::{load_or_build_grammar, load_or_build_grammar_from_paths},
 };
 pub use {
-	bundle::{QueryBundle, load_query_bundle},
+	bundle::{QueryBundle, QueryBundleError, load_query_bundle, load_raw_query_bundle},
 	grammar::{
 		GrammarError, GrammarSource as LoadedGrammarSource, load_grammar_from_path, load_grammar_from_paths,
 		locate_grammar_library,

@@ -39,7 +39,9 @@ For editor/IDE integration across multiple languages, prefer
 `glorp_syntax_language::RegistryLanguageLoader::from_registry_tolerant` over
 hand-rolled numeric language IDs so one bad runtime package does not disable
 every language. Use the strict `from_registry` constructor when you want
-fail-fast behavior instead.
+fail-fast behavior instead. Use `language_for_filename`,
+`language_for_shebang`, `language_for_content`, or `language_for_name` to
+detect a root language from editor inputs.
 
 ## Features
 

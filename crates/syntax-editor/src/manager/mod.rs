@@ -58,6 +58,7 @@ impl ViewportEntry {
 #[derive(Debug, Clone)]
 struct FullTreeMemoryEntry {
 	content: Rope,
+	compatibility_key: u64,
 	syntax: Syntax,
 }
 
@@ -240,18 +241,22 @@ impl SyntaxSlot {
 		self.drop_viewports();
 	}
 
-	pub fn remember_full_tree_for_content(&mut self, content: &Rope) {
+	pub fn remember_full_tree_for_content(&mut self, content: &Rope, compatibility_key: u64) {
 		let Some(full) = self.full.as_ref() else {
 			return;
 		};
 		if self
 			.full_tree_memory
 			.front()
-			.is_some_and(|entry| entry.content == *content)
+			.is_some_and(|entry| entry.content == *content && entry.compatibility_key == compatibility_key)
 		{
 			return;
 		}
-		if let Some(pos) = self.full_tree_memory.iter().position(|entry| entry.content == *content) {
+		if let Some(pos) = self
+			.full_tree_memory
+			.iter()
+			.position(|entry| entry.content == *content && entry.compatibility_key == compatibility_key)
+		{
 			self.full_tree_memory.remove(pos);
 		}
 		if self.full_tree_memory.len() >= FULL_TREE_MEMORY_CAP {
@@ -259,12 +264,17 @@ impl SyntaxSlot {
 		}
 		self.full_tree_memory.push_front(FullTreeMemoryEntry {
 			content: content.clone(),
+			compatibility_key,
 			syntax: full.syntax.clone(),
 		});
 	}
 
-	pub fn restore_full_tree_for_content(&mut self, content: &Rope, doc_version: u64) -> bool {
-		let Some(pos) = self.full_tree_memory.iter().position(|entry| entry.content == *content) else {
+	pub fn restore_full_tree_for_content(&mut self, content: &Rope, compatibility_key: u64, doc_version: u64) -> bool {
+		let Some(pos) = self
+			.full_tree_memory
+			.iter()
+			.position(|entry| entry.content == *content && entry.compatibility_key == compatibility_key)
+		else {
 			return false;
 		};
 		let remembered = self
@@ -277,6 +287,8 @@ impl SyntaxSlot {
 			doc_version,
 			tree_id,
 		});
+		// Restoring also refreshes this entry's recency so repeated undo/redo-like
+		// content matches keep using the hot cached tree.
 		self.full_tree_memory.push_front(remembered);
 		self.updated = true;
 		self.change_id = self.change_id.wrapping_add(1);
@@ -359,19 +371,28 @@ impl SyntaxManager {
 	/// Caches the current full-document tree for later content-based restoration.
 	///
 	/// Does nothing when `doc_id` is unknown or has no full tree.
-	pub fn remember_full_tree_for_content(&mut self, doc_id: DocumentId, content: &Rope) {
+	///
+	/// `compatibility_key` must change whenever language, loader, or parse options change.
+	/// Typical callers use an editor-owned token derived from grammar mode and
+	/// runtime/query configuration.
+	pub fn remember_full_tree_for_content(&mut self, doc_id: DocumentId, content: &Rope, compatibility_key: u64) {
 		if let Some(slot) = self.entries.get_mut(&doc_id) {
-			slot.remember_full_tree_for_content(content);
+			slot.remember_full_tree_for_content(content, compatibility_key);
 		}
 	}
 
 	/// Restores a cached full-document tree for `content` if one is available.
 	///
 	/// Returns `false` when `doc_id` is unknown or the content was not cached.
-	pub fn restore_full_tree_for_content(&mut self, doc_id: DocumentId, content: &Rope, doc_version: u64) -> bool {
+	///
+	/// `compatibility_key` must match the key used when the tree was remembered.
+	/// A content match alone is not sufficient.
+	pub fn restore_full_tree_for_content(
+		&mut self, doc_id: DocumentId, content: &Rope, compatibility_key: u64, doc_version: u64,
+	) -> bool {
 		self.entries
 			.get_mut(&doc_id)
-			.is_some_and(|slot| slot.restore_full_tree_for_content(content, doc_version))
+			.is_some_and(|slot| slot.restore_full_tree_for_content(content, compatibility_key, doc_version))
 	}
 
 	/// Returns the manager-local change counter for `doc_id`.
