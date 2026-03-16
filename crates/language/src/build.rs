@@ -69,9 +69,7 @@ pub fn grammar_lib_dir() -> PathBuf {
 		return workspace.join("target").join("grammars");
 	}
 
-	cache_dir()
-		.map(|cache| cache.join("grammars"))
-		.unwrap_or_else(|| runtime_dir().join("grammars"))
+	cache_dir().map_or_else(|| runtime_dir().join("grammars"), |cache| cache.join("grammars"))
 }
 
 pub fn get_grammar_src_dir(grammar: &GrammarConfig) -> PathBuf {

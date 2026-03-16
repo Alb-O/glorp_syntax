@@ -158,10 +158,14 @@ impl DocumentSnapshot {
 		);
 		let mut matched = Vec::new();
 		while let Some(mat) = cursor.next_match() {
-			let nodes: Vec<_> = mat.nodes_for_capture(capture).cloned().collect();
-			if !nodes.is_empty() {
-				matched.push(nodes);
-			}
+			let mut nodes = mat.nodes_for_capture(capture).cloned();
+			let Some(first) = nodes.next() else {
+				continue;
+			};
+			let mut group = Vec::with_capacity(nodes.size_hint().0 + 1);
+			group.push(first);
+			group.extend(nodes);
+			matched.push(group);
 		}
 		matched
 	}

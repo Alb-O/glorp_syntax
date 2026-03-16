@@ -93,10 +93,8 @@ impl Syntax {
 
 		if let Some(meta) = &self.viewport {
 			let coverage = remap_viewport_range(meta.base_offset..meta.base_offset + meta.real_len, edits);
-			let sealed = Arc::new(SealedSource::from_byte_range_with_newline_padding(
-				source,
-				coverage.clone(),
-			));
+			let base_offset = coverage.start;
+			let sealed = Arc::new(SealedSource::from_byte_range_with_newline_padding(source, coverage));
 			self.session = DocumentSession::new(
 				self.root_language(),
 				&RopeText::from_slice(sealed.slice()),
@@ -104,7 +102,7 @@ impl Syntax {
 				opts.into(),
 			)?;
 			self.viewport = Some(ViewportMetadata {
-				base_offset: coverage.start,
+				base_offset,
 				real_len: sealed.real_len_bytes,
 				sealed_source: sealed,
 			});

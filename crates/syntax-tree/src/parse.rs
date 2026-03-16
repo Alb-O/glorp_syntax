@@ -91,8 +91,8 @@ impl LayerData {
 		//
 		// See <https://github.com/helix-editor/helix/pull/12972#issuecomment-2725410409>.
 		let tree = self.parse_tree.as_ref().filter(|tree| {
-			let included_ranges_range = self.ranges.first().map(|r| r.start_byte).unwrap_or(0)
-				..self.ranges.last().map(|r| r.end_byte).unwrap_or(u32::MAX);
+			let included_ranges_range =
+				self.ranges.first().map_or(0, |r| r.start_byte)..self.ranges.last().map_or(u32::MAX, |r| r.end_byte);
 			// Allow re-parsing the root layer even though the range is larger. The root always
 			// covers `0..u32::MAX`:
 			if included_ranges_range == (0..u32::MAX) {

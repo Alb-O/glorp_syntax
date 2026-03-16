@@ -171,7 +171,7 @@ impl Syntax {
 			return;
 		};
 		let definition_captures = injection_query.local_definition_captures.load();
-		if definition_captures.is_empty() {
+		if definition_captures.iter().all(Option::is_none) {
 			return;
 		}
 
@@ -197,11 +197,15 @@ impl Syntax {
 				scope = locals.push(ScopeData {
 					definitions: HashMap::new(),
 					range: matched_node.node.byte_range(),
-					inherit: !injection_query.not_scope_inherits.contains(&query_match.pattern()),
+					inherit: !injection_query
+						.not_scope_inherits
+						.get(query_match.pattern().idx())
+						.copied()
+						.unwrap_or_default(),
 					children: Vec::new(),
 					parent: Some(scope),
 				});
-			} else if definition_captures.contains_key(&capture) {
+			} else if definition_captures.get(capture.idx()).is_some_and(Option::is_some) {
 				let text = source.byte_slice(range.start as usize..range.end as usize).to_string();
 				locals[scope].definitions.insert(text, Definition { capture, range });
 			}

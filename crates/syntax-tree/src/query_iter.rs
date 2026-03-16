@@ -285,9 +285,9 @@ where
 				}
 				(Some(_) | None, Some(_)) => {
 					// consume injection
-					let injection = self.current_layer.injections.next().unwrap();
+					let injection = self.current_layer.injections.next().unwrap().clone();
 					self.enter_injection(injection.clone());
-					return Some(QueryIterEvent::EnterInjection(injection.clone()));
+					return Some(QueryIterEvent::EnterInjection(injection));
 				}
 			}
 		}

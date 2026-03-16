@@ -11,7 +11,7 @@ use {
 	ropey::RopeSlice,
 	std::{
 		cmp::Reverse,
-		collections::{HashMap, HashSet},
+		collections::HashMap,
 		iter::{self, Peekable},
 		mem::take,
 		sync::{Arc, LazyLock},
@@ -82,44 +82,46 @@ enum IncludedChildren {
 #[derive(Debug)]
 pub struct InjectionsQuery {
 	injection_query: Query,
-	injection_properties: HashMap<Pattern, InjectionProperties>,
+	injection_properties: Vec<InjectionProperties>,
 	injection_content_capture: Option<Capture>,
 	injection_language_capture: Option<Capture>,
 	injection_filename_capture: Option<Capture>,
 	injection_shebang_capture: Option<Capture>,
 	// Note that the injections query is concatenated with the locals query.
 	pub(crate) local_query: Query,
-	// TODO: Use a Vec<bool> instead?
-	pub(crate) not_scope_inherits: HashSet<Pattern>,
+	pub(crate) not_scope_inherits: Vec<bool>,
 	pub(crate) local_scope_capture: Option<Capture>,
-	pub(crate) local_definition_captures: ArcSwap<HashMap<Capture, Highlight>>,
+	pub(crate) local_definition_captures: ArcSwap<Vec<Option<Highlight>>>,
 }
 
 impl InjectionsQuery {
 	pub fn new(
 		grammar: Grammar, injection_query_text: &str, local_query_text: &str,
 	) -> Result<Self, query::ParseError> {
-		let mut injection_properties: HashMap<Pattern, InjectionProperties> = HashMap::new();
-		let mut not_scope_inherits = HashSet::new();
+		let mut injection_properties = Vec::new();
+		let mut not_scope_inherits = Vec::new();
 		let injection_query = Query::new(grammar, injection_query_text, |pattern, predicate| {
 			match predicate {
 				// injections
 				UserPredicate::SetProperty {
 					key: "injection.include-unnamed-children",
 					val: None,
-				} => injection_properties.entry(pattern).or_default().include_children = IncludedChildren::Unnamed,
+				} => {
+					pattern_properties_mut(&mut injection_properties, pattern).include_children =
+						IncludedChildren::Unnamed
+				}
 				UserPredicate::SetProperty {
 					key: "injection.include-children",
 					val: None,
-				} => injection_properties.entry(pattern).or_default().include_children = IncludedChildren::All,
+				} => pattern_properties_mut(&mut injection_properties, pattern).include_children = IncludedChildren::All,
 				UserPredicate::SetProperty {
 					key: "injection.language",
 					val: Some(lang),
-				} => injection_properties.entry(pattern).or_default().language = Some(lang.into()),
+				} => pattern_properties_mut(&mut injection_properties, pattern).language = Some(lang.into()),
 				UserPredicate::SetProperty {
 					key: "injection.combined",
 					val: None,
-				} => injection_properties.entry(pattern).or_default().combined = true,
+				} => pattern_properties_mut(&mut injection_properties, pattern).combined = true,
 				predicate => {
 					return Err(InvalidPredicateError::unknown(predicate));
 				}
@@ -133,7 +135,7 @@ impl InjectionsQuery {
 					val,
 				} => {
 					if val.is_some_and(|val| val != "true") {
-						not_scope_inherits.insert(pattern);
+						set_pattern_flag(&mut not_scope_inherits, pattern);
 					}
 				}
 				predicate => {
@@ -156,20 +158,22 @@ impl InjectionsQuery {
 			injection_query,
 			not_scope_inherits,
 			local_scope_capture: local_query.get_capture("local.scope"),
-			local_definition_captures: ArcSwap::from_pointee(HashMap::new()),
+			local_definition_captures: ArcSwap::from_pointee(vec![None; local_query.num_captures() as usize]),
 			local_query,
 		})
 	}
 
 	pub(crate) fn configure(&self, f: &mut impl FnMut(&str) -> Option<Highlight>) {
-		let local_definition_captures = self
-			.local_query
-			.captures()
-			.filter_map(|(capture, name)| {
-				let suffix = name.strip_prefix("local.definition.")?;
-				Some((capture, f(suffix)?))
-			})
-			.collect();
+		let mut local_definition_captures = vec![None; self.local_query.num_captures() as usize];
+		for (capture, name) in self.local_query.captures() {
+			let Some(suffix) = name.strip_prefix("local.definition.") else {
+				continue;
+			};
+			let Some(highlight) = f(suffix) else {
+				continue;
+			};
+			local_definition_captures[capture.idx()] = Some(highlight);
+		}
 		self.local_definition_captures
 			.store(Arc::new(local_definition_captures));
 	}
@@ -178,7 +182,7 @@ impl InjectionsQuery {
 		&self, query_match: &QueryMatch<'a, 'tree>, node_idx: MatchedNodeIdx, source: RopeSlice<'a>,
 		loader: impl LanguageLoader,
 	) -> Option<InjectionQueryMatch<'tree>> {
-		let properties = self.injection_properties.get(&query_match.pattern());
+		let properties = self.injection_properties.get(query_match.pattern().idx());
 
 		let mut marker = None;
 		let mut last_content_node = 0;
@@ -329,6 +333,22 @@ impl InjectionsQuery {
 			buf.pop()
 		})
 	}
+}
+
+fn pattern_properties_mut(properties: &mut Vec<InjectionProperties>, pattern: Pattern) -> &mut InjectionProperties {
+	let idx = pattern.idx();
+	if idx >= properties.len() {
+		properties.resize_with(idx + 1, InjectionProperties::default);
+	}
+	&mut properties[idx]
+}
+
+fn set_pattern_flag(flags: &mut Vec<bool>, pattern: Pattern) {
+	let idx = pattern.idx();
+	if idx >= flags.len() {
+		flags.resize(idx + 1, false);
+	}
+	flags[idx] = true;
 }
 
 impl Syntax {

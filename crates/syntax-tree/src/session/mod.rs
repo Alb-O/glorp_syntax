@@ -98,7 +98,7 @@ impl DocumentSession {
 			.collect();
 		let mut text = original_text.clone();
 		let mut syntax = self.syntax.as_ref().clone();
-		let changed_ranges = coalesce_ranges(normalized.iter().map(invalidated_range).collect());
+		let changed_ranges = coalesce_sorted_ranges(normalized.iter().map(invalidated_range));
 
 		for edit in normalized.iter().rev() {
 			apply_edit(&mut text, edit)?;
@@ -202,9 +202,9 @@ fn invalidated_range(edit: &TextEdit) -> std::ops::Range<u32> {
 	edit.range.start..edit.range.end.max(new_end)
 }
 
-fn coalesce_ranges(mut ranges: Vec<std::ops::Range<u32>>) -> Vec<std::ops::Range<u32>> {
-	ranges.sort_by_key(|range| range.start);
-	let mut merged: Vec<std::ops::Range<u32>> = Vec::with_capacity(ranges.len());
+fn coalesce_sorted_ranges(ranges: impl IntoIterator<Item = std::ops::Range<u32>>) -> Vec<std::ops::Range<u32>> {
+	let ranges = ranges.into_iter();
+	let mut merged: Vec<std::ops::Range<u32>> = Vec::with_capacity(ranges.size_hint().0);
 	for range in ranges {
 		if let Some(prev) = merged.last_mut()
 			&& range.start <= prev.end

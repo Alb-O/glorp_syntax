@@ -10,9 +10,8 @@ use {
 	std::{
 		borrow::Cow,
 		cmp,
-		collections::{HashMap, HashSet},
+		collections::HashMap,
 		fmt,
-		mem::replace,
 		num::NonZeroU32,
 		ops::{Bound, RangeBounds},
 		slice,
@@ -33,7 +32,7 @@ pub struct HighlightQuery {
 	highlight_indices: ArcSwap<Vec<Option<Highlight>>>,
 	#[allow(dead_code)]
 	/// Patterns that do not match when the node is a local.
-	non_local_patterns: HashSet<Pattern>,
+	non_local_patterns: Vec<bool>,
 	local_reference_capture: Option<Capture>,
 }
 
@@ -46,7 +45,7 @@ impl HighlightQuery {
 		query_source.push_str(highlight_query_text);
 		query_source.push_str(local_query_text);
 
-		let mut non_local_patterns = HashSet::new();
+		let mut non_local_patterns = Vec::new();
 		let mut query = Query::new(grammar, &query_source, |pattern, predicate| {
 			match predicate {
 				// Allow the `(#set! local.scope-inherits <bool>)` property to be parsed.
@@ -63,7 +62,7 @@ impl HighlightQuery {
 					key: "local",
 					val: None,
 				} => {
-					non_local_patterns.insert(pattern);
+					set_pattern_flag(&mut non_local_patterns, pattern);
 				}
 				_ => return Err(InvalidPredicateError::unknown(predicate)),
 			}
@@ -304,7 +303,8 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 		// hasn't occurred yet - so the current layer is the one the query iter was on _before_
 		// `QueryIter::next`.
 		self.current_layer = self.query.current_layer();
-		let event = replace(&mut self.next_query_event, self.query.next());
+		let event = self.next_query_event.take();
+		self.next_query_event = self.query.next();
 		self.next_highlight_start = self
 			.next_query_event
 			.as_ref()
@@ -356,7 +356,13 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 		debug_assert!(!range.is_empty(), "QueryIter should not emit matches with empty ranges");
 
 		let config = self.active_config.expect("must have an active config to emit matches");
-		if config.highlight_query.non_local_patterns.contains(&node.pattern) {
+		if config
+			.highlight_query
+			.non_local_patterns
+			.get(node.pattern.idx())
+			.copied()
+			.unwrap_or_default()
+		{
 			let text: Cow<str> = self
 				.query
 				.source()
@@ -396,8 +402,9 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 				.injection_query
 				.local_definition_captures
 				.load()
-				.get(&definition.capture)
+				.get(definition.capture.idx())
 				.copied()
+				.flatten()
 		} else {
 			config.highlight_query.highlight_indices.load()[node.capture.idx()]
 		};
@@ -457,6 +464,14 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 			self.active_highlights,
 		);
 	}
+}
+
+fn set_pattern_flag(flags: &mut Vec<bool>, pattern: Pattern) {
+	let idx = pattern.idx();
+	if idx >= flags.len() {
+		flags.resize(idx + 1, false);
+	}
+	flags[idx] = true;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
