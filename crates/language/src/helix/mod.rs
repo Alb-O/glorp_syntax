@@ -77,7 +77,7 @@ pub fn ensure_helix_queries_checkout(cache_root: &Path, lock: &HelixRuntimeLock)
 pub fn merge_language_queries(
 	language: &str, roots: &[PathBuf],
 ) -> std::io::Result<std::collections::BTreeMap<String, String>> {
-	load_query_bundle(language, roots).map(|bundle| bundle.into_queries())
+	load_query_bundle(language, roots).map(crate::bundle::QueryBundle::into_queries)
 }
 
 fn is_valid_checkout(checkout_dir: &Path, commit: &str) -> bool {

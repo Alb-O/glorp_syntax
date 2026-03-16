@@ -1,13 +1,17 @@
 use std::path::PathBuf;
 
+fn push_unique(dirs: &mut Vec<PathBuf>, path: PathBuf) {
+	if !dirs.contains(&path) {
+		dirs.push(path);
+	}
+}
+
 pub fn runtime_dir() -> PathBuf {
 	if let Ok(runtime) = std::env::var("GLORP_SYNTAX_RUNTIME") {
 		return PathBuf::from(runtime);
 	}
 
-	data_local_dir()
-		.map(|dir| dir.join("glorp_syntax"))
-		.unwrap_or_else(|| PathBuf::from("."))
+	data_local_dir().map_or_else(|| PathBuf::from("."), |dir| dir.join("glorp_syntax"))
 }
 
 pub fn cache_dir() -> Option<PathBuf> {
@@ -32,31 +36,34 @@ pub fn grammar_search_paths() -> Vec<PathBuf> {
 	let mut dirs = Vec::new();
 
 	if let Ok(runtime) = std::env::var("GLORP_SYNTAX_RUNTIME") {
-		dirs.push(PathBuf::from(runtime).join("grammars"));
+		push_unique(&mut dirs, PathBuf::from(runtime).join("grammars"));
 	}
 
 	if let Ok(exe) = std::env::current_exe()
 		&& let Some(bin_dir) = exe.parent()
 	{
-		dirs.push(bin_dir.join("..").join("share").join("glorp_syntax").join("grammars"));
+		push_unique(
+			&mut dirs,
+			bin_dir.join("..").join("share").join("glorp_syntax").join("grammars"),
+		);
 	}
 
 	if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR")
 		&& let Some(workspace) = PathBuf::from(manifest).ancestors().nth(2)
 	{
-		dirs.push(workspace.join("target").join("grammars"));
+		push_unique(&mut dirs, workspace.join("target").join("grammars"));
 	}
 
 	if let Some(cache) = cache_dir() {
-		dirs.push(cache.join("grammars"));
+		push_unique(&mut dirs, cache.join("grammars"));
 	}
 
 	if let Some(data) = data_local_dir() {
-		dirs.push(data.join("glorp_syntax").join("grammars"));
+		push_unique(&mut dirs, data.join("glorp_syntax").join("grammars"));
 	}
 
 	for helix_dir in helix_runtime_dirs() {
-		dirs.push(helix_dir.join("grammars"));
+		push_unique(&mut dirs, helix_dir.join("grammars"));
 	}
 
 	dirs
@@ -66,15 +73,15 @@ pub fn query_search_paths() -> Vec<PathBuf> {
 	let mut dirs = Vec::new();
 
 	if let Ok(runtime) = std::env::var("GLORP_SYNTAX_RUNTIME") {
-		dirs.push(PathBuf::from(runtime).join("queries"));
+		push_unique(&mut dirs, PathBuf::from(runtime).join("queries"));
 	}
 
 	if let Some(data) = data_local_dir() {
-		dirs.push(data.join("glorp_syntax").join("queries"));
+		push_unique(&mut dirs, data.join("glorp_syntax").join("queries"));
 	}
 
 	for helix_dir in helix_runtime_dirs() {
-		dirs.push(helix_dir.join("queries"));
+		push_unique(&mut dirs, helix_dir.join("queries"));
 	}
 
 	dirs
@@ -101,7 +108,7 @@ fn helix_runtime_dirs() -> Vec<PathBuf> {
 	let mut dirs = Vec::new();
 
 	if let Ok(runtime) = std::env::var("HELIX_RUNTIME") {
-		dirs.push(PathBuf::from(runtime));
+		push_unique(&mut dirs, PathBuf::from(runtime));
 	}
 
 	#[cfg(unix)]
@@ -111,14 +118,14 @@ fn helix_runtime_dirs() -> Vec<PathBuf> {
 	{
 		let helix_runtime = config.join("helix").join("runtime");
 		if helix_runtime.exists() {
-			dirs.push(helix_runtime);
+			push_unique(&mut dirs, helix_runtime);
 		}
 	}
 
 	if let Some(data) = data_local_dir() {
 		let helix_runtime = data.join("helix").join("runtime");
 		if helix_runtime.exists() {
-			dirs.push(helix_runtime);
+			push_unique(&mut dirs, helix_runtime);
 		}
 	}
 

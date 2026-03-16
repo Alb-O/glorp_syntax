@@ -283,7 +283,7 @@ where
 						return Some(QueryIterEvent::Match(matched_node));
 					}
 				}
-				(Some(_), Some(_)) | (None, Some(_)) => {
+				(Some(_) | None, Some(_)) => {
 					// consume injection
 					let injection = self.current_layer.injections.next().unwrap();
 					self.enter_injection(injection.clone());

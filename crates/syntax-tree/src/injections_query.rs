@@ -99,10 +99,6 @@ impl InjectionsQuery {
 	pub fn new(
 		grammar: Grammar, injection_query_text: &str, local_query_text: &str,
 	) -> Result<Self, query::ParseError> {
-		let mut query_source = String::with_capacity(injection_query_text.len() + local_query_text.len());
-		query_source.push_str(injection_query_text);
-		query_source.push_str(local_query_text);
-
 		let mut injection_properties: HashMap<Pattern, InjectionProperties> = HashMap::new();
 		let mut not_scope_inherits = HashSet::new();
 		let injection_query = Query::new(grammar, injection_query_text, |pattern, predicate| {
@@ -383,12 +379,11 @@ impl Syntax {
 				// for common cases
 				if last_injection.range.start <= matched_node_range.start {
 					continue;
-				} else {
-					insert_position =
-						injections.partition_point(|injection| injection.range.end <= matched_node_range.start);
-					if injections[insert_position].range.start < matched_node_range.end {
-						continue;
-					}
+				}
+				insert_position =
+					injections.partition_point(|injection| injection.range.end <= matched_node_range.start);
+				if injections[insert_position].range.start < matched_node_range.end {
+					continue;
 				}
 			}
 
@@ -574,13 +569,11 @@ impl Syntax {
 			// is not ever visited.
 			self.layer_mut(skipped.layer).flags.modified = true;
 		}
-		injections
-			.next_if(|injection| {
-				injection.range.start < new_range.end
-					&& self.layer(injection.layer).language == language
-					&& !self.layer(injection.layer).flags.reused
-			})
-			.clone()
+		injections.next_if(|injection| {
+			injection.range.start < new_range.end
+				&& self.layer(injection.layer).language == language
+				&& !self.layer(injection.layer).flags.reused
+		})
 	}
 }
 

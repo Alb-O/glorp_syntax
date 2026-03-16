@@ -308,7 +308,7 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 		self.next_highlight_start = self
 			.next_query_event
 			.as_ref()
-			.map_or(u32::MAX, |event| event.start_byte());
+			.map_or(u32::MAX, QueryIterEvent::start_byte);
 		event
 	}
 

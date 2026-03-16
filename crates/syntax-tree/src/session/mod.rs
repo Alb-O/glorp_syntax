@@ -2,7 +2,7 @@ use {
 	crate::{
 		DocumentSnapshot, Error, Language, LanguageLoader, Syntax,
 		change::{ChangeSet, Revision, SnapshotId, TextEdit, UpdateResult},
-		text::{ByteRangeText, DocumentText, TextStorage},
+		text::{DocumentText, TextStorage},
 		tree_sitter::{InputEdit, Point},
 	},
 	ropey::Rope,
@@ -170,11 +170,20 @@ fn normalize_edits(text: &Rope, edits: &ChangeSet) -> Result<Vec<TextEdit>, Erro
 	let mut normalized = Vec::with_capacity(edits.iter().size_hint().0);
 	for edit in edits.iter() {
 		validate_edit(text, edit)?;
-		if text.byte_text(edit.range.clone()) != edit.replacement {
+		if !byte_range_eq(text, edit.range.clone(), &edit.replacement) {
 			normalized.push(edit.clone());
 		}
 	}
 	Ok(normalized)
+}
+
+fn byte_range_eq(text: &Rope, range: std::ops::Range<u32>, expected: &str) -> bool {
+	let slice = text.byte_slice(range.start as usize..range.end as usize);
+	slice.len_bytes() == expected.len()
+		&& slice
+			.chunks()
+			.try_fold(expected, |remaining, chunk| remaining.strip_prefix(chunk))
+			.is_some_and(str::is_empty)
 }
 
 fn invalidated_range(edit: &TextEdit) -> std::ops::Range<u32> {

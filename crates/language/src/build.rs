@@ -153,7 +153,6 @@ pub fn build_grammar(grammar: &GrammarConfig) -> Result<BuildStatus> {
 		})?
 	};
 
-	compile_objects(&src_dir, &lib_dir, &grammar.grammar_id, compiler, needs_cxx)?;
 	link_shared_library(&src_dir, &lib_path, compiler, needs_cxx)?;
 
 	if !lib_path.exists() {
@@ -313,45 +312,6 @@ fn needs_recompile(src_dir: &Path, lib_path: &Path) -> bool {
 			.and_then(|metadata| metadata.modified())
 			.is_ok_and(|src_mtime| src_mtime > lib_mtime)
 	})
-}
-
-fn compile_objects(src_dir: &Path, lib_dir: &Path, grammar_id: &str, compiler: &str, needs_cxx: bool) -> Result<()> {
-	let target = std::env::var("TARGET").unwrap_or_else(|_| {
-		let arch = std::env::consts::ARCH;
-		if cfg!(target_os = "windows") {
-			format!("{arch}-pc-windows-msvc")
-		} else if cfg!(target_os = "macos") {
-			format!("{arch}-apple-darwin")
-		} else {
-			format!("{arch}-unknown-linux-gnu")
-		}
-	});
-
-	let scanner_cc = src_dir.join("scanner.cc");
-	let scanner_c = src_dir.join("scanner.c");
-	let mut build = cc::Build::new();
-	build
-		.opt_level(3)
-		.cargo_metadata(false)
-		.warnings(false)
-		.include(src_dir)
-		.host(&target)
-		.target(&target)
-		.compiler(compiler)
-		.file(src_dir.join("parser.c"));
-
-	if needs_cxx && scanner_cc.exists() {
-		build.cpp(true).file(&scanner_cc).std("c++14");
-	} else if scanner_c.exists() {
-		build.file(&scanner_c);
-	}
-
-	let obj_dir = lib_dir.join("obj").join(grammar_id);
-	fs::create_dir_all(&obj_dir)?;
-	build.out_dir(&obj_dir);
-	build
-		.try_compile(grammar_id)
-		.map_err(|error| GrammarBuildError::Compilation(error.to_string()))
 }
 
 fn link_shared_library(src_dir: &Path, lib_path: &Path, compiler: &str, needs_cxx: bool) -> Result<()> {
