@@ -15,7 +15,7 @@ use {
 		hash::{Hash, Hasher},
 		time::Duration,
 	},
-	tree_sitter::{IncompatibleGrammarError, Node, Tree},
+	tree_sitter::{IncompatibleGrammarError, Node, Pattern, Tree},
 };
 pub use {
 	crate::{
@@ -117,6 +117,7 @@ impl Syntax {
 		let root_layer = LayerData {
 			parse_tree: None,
 			language,
+			origin_pattern: None,
 			flags: LayerUpdateFlags::default(),
 			ranges: vec![tree_sitter::Range {
 				start_byte: 0,
@@ -241,6 +242,7 @@ pub struct Injection {
 pub struct LayerData {
 	pub language: Language,
 	parse_tree: Option<Tree>,
+	origin_pattern: Option<Pattern>,
 	ranges: Vec<tree_sitter::Range>,
 	/// a list of **sorted** non-overlapping injection ranges. Note that
 	/// injection ranges are not relative to the start of this layer but the
@@ -283,6 +285,10 @@ impl LayerData {
 
 	pub fn locals(&self) -> &Locals {
 		&self.locals
+	}
+
+	pub(crate) fn origin_pattern(&self) -> Option<Pattern> {
+		self.origin_pattern
 	}
 
 	pub fn parent(&self) -> Option<Layer> {
