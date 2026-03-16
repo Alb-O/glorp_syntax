@@ -56,6 +56,7 @@ pub enum GrammarBuildError {
 }
 
 type Result<T> = std::result::Result<T, GrammarBuildError>;
+type ResolvedCompilers = (Option<Box<str>>, Option<Box<str>>);
 
 pub fn grammar_sources_dir() -> PathBuf {
 	cache_dir().unwrap_or_else(runtime_dir).join("grammars").join("sources")
@@ -139,16 +140,16 @@ pub fn build_grammar(grammar: &GrammarConfig) -> Result<BuildStatus> {
 	info!(grammar = %grammar.grammar_id, lib_path = %lib_path.display(), "Compiling grammar");
 
 	let needs_cxx = src_dir.join("scanner.cc").exists();
-	let (cc, cxx) = resolve_compilers();
+	let compilers = resolve_compilers();
 	let compiler = if needs_cxx {
-		cxx.ok_or_else(|| {
+		compilers.1.as_deref().ok_or_else(|| {
 			GrammarBuildError::Compilation(format!(
 				"C++ compiler required for {} but none found. Install clang++/g++ or set CXX.",
 				grammar.grammar_id
 			))
 		})?
 	} else {
-		cc.ok_or_else(|| {
+		compilers.0.as_deref().ok_or_else(|| {
 			GrammarBuildError::Compilation("C compiler required but none found. Install clang/gcc or set CC.".into())
 		})?
 	};
@@ -213,10 +214,10 @@ fn git_rev_parse(dir: &Path) -> Result<String> {
 		.output()
 		.map_err(|error| GrammarBuildError::GitCommand(error.to_string()))?;
 	if output.status.success() {
-		Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+		Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 	} else {
 		Err(GrammarBuildError::GitCommand(
-			String::from_utf8_lossy(&output.stderr).into(),
+			String::from_utf8_lossy(&output.stderr).into_owned(),
 		))
 	}
 }
@@ -243,7 +244,7 @@ fn git_clone(remote: &str, dest: &Path) -> Result<()> {
 		Ok(())
 	} else {
 		Err(GrammarBuildError::GitCommand(
-			String::from_utf8_lossy(&output.stderr).into(),
+			String::from_utf8_lossy(&output.stderr).into_owned(),
 		))
 	}
 }
@@ -258,7 +259,7 @@ fn run_git(dir: &Path, args: &[&str]) -> Result<()> {
 		Ok(())
 	} else {
 		Err(GrammarBuildError::GitCommand(
-			String::from_utf8_lossy(&output.stderr).into(),
+			String::from_utf8_lossy(&output.stderr).into_owned(),
 		))
 	}
 }
@@ -274,9 +275,9 @@ fn find_compiler<'a>(candidates: &[&'a str]) -> Option<&'a str> {
 	})
 }
 
-fn resolve_compilers() -> (Option<&'static str>, Option<&'static str>) {
-	static COMPILERS: OnceLock<(Option<&'static str>, Option<&'static str>)> = OnceLock::new();
-	*COMPILERS.get_or_init(|| {
+fn resolve_compilers() -> &'static ResolvedCompilers {
+	static COMPILERS: OnceLock<ResolvedCompilers> = OnceLock::new();
+	COMPILERS.get_or_init(|| {
 		#[cfg(unix)]
 		const CC_CANDIDATES: &[&str] = &["cc", "clang", "gcc"];
 		#[cfg(unix)]
@@ -292,12 +293,12 @@ fn resolve_compilers() -> (Option<&'static str>, Option<&'static str>) {
 
 		let cc = std::env::var("CC")
 			.ok()
-			.map(|value| value.leak() as &str)
-			.or_else(|| find_compiler(CC_CANDIDATES));
+			.map(String::into_boxed_str)
+			.or_else(|| find_compiler(CC_CANDIDATES).map(Into::into));
 		let cxx = std::env::var("CXX")
 			.ok()
-			.map(|value| value.leak() as &str)
-			.or_else(|| find_compiler(CXX_CANDIDATES));
+			.map(String::into_boxed_str)
+			.or_else(|| find_compiler(CXX_CANDIDATES).map(Into::into));
 		(cc, cxx)
 	})
 }
@@ -366,7 +367,7 @@ fn run_compiler(mut cmd: Command) -> Result<()> {
 		Ok(())
 	} else {
 		Err(GrammarBuildError::Compilation(
-			String::from_utf8_lossy(&output.stderr).into(),
+			String::from_utf8_lossy(&output.stderr).into_owned(),
 		))
 	}
 }

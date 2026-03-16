@@ -130,11 +130,11 @@ fn run_git_capture(dir: &Path, args: &[&str]) -> Result<String, HelixQueryError>
 		})?;
 
 	if output.status.success() {
-		Ok(String::from_utf8_lossy(&output.stdout).to_string())
+		Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 	} else {
 		Err(HelixQueryError::Git {
 			dir: dir.display().to_string(),
-			message: String::from_utf8_lossy(&output.stderr).to_string(),
+			message: String::from_utf8_lossy(&output.stderr).into_owned(),
 		})
 	}
 }

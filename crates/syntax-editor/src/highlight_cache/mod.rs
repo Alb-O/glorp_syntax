@@ -178,6 +178,9 @@ impl<S> HighlightTiles<S> {
 	}
 
 	fn touch(&mut self, idx: usize) {
+		if self.mru_order.front() == Some(&idx) {
+			return;
+		}
 		if let Some(pos) = self.mru_order.iter().position(|entry| *entry == idx) {
 			self.mru_order.remove(pos);
 			self.mru_order.push_front(idx);

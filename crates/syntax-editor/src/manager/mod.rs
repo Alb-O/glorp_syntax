@@ -107,6 +107,10 @@ impl ViewportCache {
 		self.promote(key);
 	}
 
+	pub fn entries_mru(&self) -> impl Iterator<Item = &ViewportEntry> + '_ {
+		self.iter_keys_mru().filter_map(|key| self.map.get(&key))
+	}
+
 	pub fn clear(&mut self) {
 		self.order.clear();
 		self.map.clear();
@@ -218,6 +222,9 @@ impl SyntaxSlot {
 
 impl ViewportCache {
 	fn promote(&mut self, key: ViewportKey) -> bool {
+		if self.order.front() == Some(&key) {
+			return true;
+		}
 		let Some(pos) = self.order.iter().position(|entry| *entry == key) else {
 			return false;
 		};
@@ -279,15 +286,9 @@ impl SyntaxManager {
 		if let Some(full) = slot.full.as_ref() {
 			return Some(&full.syntax);
 		}
-		for key in slot.viewport_cache.iter_keys_mru() {
-			let Some(entry) = slot.viewport_cache.map.get(&key) else {
-				continue;
-			};
-			if let Some((tree, _)) = entry.stages().next() {
-				return Some(&tree.syntax);
-			}
-		}
-		None
+		slot.viewport_cache
+			.entries_mru()
+			.find_map(|entry| entry.stages().next().map(|(tree, _)| &tree.syntax))
 	}
 
 	pub fn syntax_for_viewport(
@@ -301,7 +302,7 @@ impl SyntaxManager {
 			consider_candidate(
 				&mut best_overlapping,
 				&mut best_any,
-				SyntaxSelection {
+				CandidateSelection {
 					syntax: &full.syntax,
 					tree_id: full.tree_id,
 					tree_doc_version: full.doc_version,
@@ -313,19 +314,16 @@ impl SyntaxManager {
 			);
 		}
 
-		for key in slot.viewport_cache.iter_keys_mru() {
-			let Some(entry) = slot.viewport_cache.map.get(&key) else {
-				continue;
-			};
+		for entry in slot.viewport_cache.entries_mru() {
 			for (tree, enriched) in entry.stages() {
 				consider_candidate(
 					&mut best_overlapping,
 					&mut best_any,
-					SyntaxSelection {
+					CandidateSelection {
 						syntax: &tree.syntax,
 						tree_id: tree.tree_id,
 						tree_doc_version: tree.doc_version,
-						coverage: Some(tree.coverage.clone()),
+						coverage: Some(&tree.coverage),
 					},
 					enriched,
 					doc_version,
@@ -334,7 +332,9 @@ impl SyntaxManager {
 			}
 		}
 
-		best_overlapping.or(best_any).map(|(selection, _)| selection)
+		best_overlapping
+			.or(best_any)
+			.map(|(selection, _)| selection.into_selection())
 	}
 
 	pub fn install_full(&mut self, doc_id: DocumentId, syntax: Syntax, doc_version: u64) -> u64 {
@@ -397,7 +397,7 @@ impl SyntaxManager {
 	}
 }
 
-fn overlaps(coverage: &Option<Range<u32>>, viewport: &Range<u32>) -> bool {
+fn overlaps(coverage: Option<&Range<u32>>, viewport: &Range<u32>) -> bool {
 	match coverage {
 		None => true,
 		Some(coverage) => viewport.start < coverage.end && viewport.end > coverage.start,
@@ -423,11 +423,29 @@ impl CandidateScore {
 	}
 }
 
-type ScoredSelection<'a> = (SyntaxSelection<'a>, CandidateScore);
+struct CandidateSelection<'a> {
+	syntax: &'a Syntax,
+	tree_id: u64,
+	tree_doc_version: u64,
+	coverage: Option<&'a Range<u32>>,
+}
+
+impl<'a> CandidateSelection<'a> {
+	fn into_selection(self) -> SyntaxSelection<'a> {
+		SyntaxSelection {
+			syntax: self.syntax,
+			tree_id: self.tree_id,
+			tree_doc_version: self.tree_doc_version,
+			coverage: self.coverage.cloned(),
+		}
+	}
+}
+
+type ScoredSelection<'a> = (CandidateSelection<'a>, CandidateScore);
 
 fn consider_candidate<'a>(
 	best_overlapping: &mut Option<ScoredSelection<'a>>, best_any: &mut Option<ScoredSelection<'a>>,
-	selection: SyntaxSelection<'a>, enriched: bool, doc_version: u64, viewport: &Range<u32>,
+	selection: CandidateSelection<'a>, enriched: bool, doc_version: u64, viewport: &Range<u32>,
 ) {
 	let score = CandidateScore::new(
 		selection.tree_doc_version,
@@ -435,7 +453,7 @@ fn consider_candidate<'a>(
 		enriched,
 		doc_version,
 	);
-	if overlaps(&selection.coverage, viewport) {
+	if overlaps(selection.coverage, viewport) {
 		if best_overlapping.as_ref().is_none_or(|(_, prev)| score > *prev) {
 			*best_overlapping = Some((selection, score));
 		}
