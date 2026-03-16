@@ -278,9 +278,9 @@ impl LayerData {
 	/// Returns the injection range **within this layers** that contains `idx`.
 	/// This function will not descend into nested injections
 	pub fn injection_at_byte_idx(&self, idx: u32) -> Option<&Injection> {
-		self.injections_at_byte_idx(idx)
-			.next()
-			.filter(|injection| injection.range.start <= idx)
+		let injection_idx = self.injections.partition_point(|range| range.range.end < idx);
+		let injection = self.injections.get(injection_idx)?;
+		(injection.range.start <= idx).then_some(injection)
 	}
 
 	/// Returns the injection ranges **within this layers** that contain

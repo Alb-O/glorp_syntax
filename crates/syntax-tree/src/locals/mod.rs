@@ -25,16 +25,15 @@ pub struct Locals {
 
 impl Default for Locals {
 	fn default() -> Self {
-		let mut scopes = Vec::with_capacity(4);
-		scopes.push(ScopeData {
-			definitions: HashMap::new(),
-			range: 0..u32::MAX,
-			inherit: false,
-			children: Vec::new(),
-			parent: None,
-		});
-
-		Self { scopes }
+		Self {
+			scopes: vec![ScopeData {
+				definitions: HashMap::new(),
+				range: 0..u32::MAX,
+				inherit: false,
+				children: Vec::new(),
+				parent: None,
+			}],
+		}
 	}
 }
 

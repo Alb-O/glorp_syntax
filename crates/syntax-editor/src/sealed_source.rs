@@ -17,14 +17,13 @@ impl SealedSource {
 			rope.append(chunk);
 		}
 		let real_len_bytes = window.len_bytes() as u32;
+		let suffix_len_bytes = suffix.len() as u32;
 		if !suffix.is_empty() {
 			rope.append(suffix);
 		}
-		let rope = rope.finish();
-		let suffix_len_bytes = (rope.len_bytes() as u32) - real_len_bytes;
 
 		Self {
-			rope,
+			rope: rope.finish(),
 			real_len_bytes,
 			suffix_len_bytes,
 		}

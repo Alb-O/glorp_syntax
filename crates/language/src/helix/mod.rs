@@ -85,10 +85,7 @@ fn is_valid_checkout(checkout_dir: &Path, commit: &str) -> bool {
 		return false;
 	}
 
-	match run_git_capture(checkout_dir, &["rev-parse", "HEAD"]) {
-		Ok(head) => head.trim() == commit,
-		Err(_) => false,
-	}
+	run_git_capture(checkout_dir, &["rev-parse", "HEAD"]).is_ok_and(|head| head.trim() == commit)
 }
 
 fn clone_sparse_helix_queries(checkout_dir: &Path, lock: &HelixRuntimeLock) -> Result<(), HelixQueryError> {

@@ -205,11 +205,9 @@ impl InjectionsQuery {
 
 				// some languages allow space and newlines before the actual string content
 				// so a shebang could be on either the first or second line
-				let lines = if let Ok(end) = node_slice.try_line_to_byte(2) {
-					node_slice.byte_slice(..end)
-				} else {
-					node_slice
-				};
+				let lines = node_slice
+					.try_line_to_byte(2)
+					.map_or(node_slice, |end| node_slice.byte_slice(..end));
 
 				marker = SHEBANG_REGEX
 					.captures_iter(regex_cursor::Input::new(lines))
@@ -217,16 +215,18 @@ impl InjectionsQuery {
 						let cap = lines.byte_slice(cap.get_group(1).unwrap().range());
 						InjectionLanguageMarker::Shebang(cap)
 					})
-					.next()
+					.next();
 			} else if capture == self.injection_content_capture {
 				content_nodes += 1;
 
 				last_content_node = i as u32;
 			}
 		}
-		let marker = marker.or(properties
-			.and_then(|p| p.language.as_deref())
-			.map(InjectionLanguageMarker::Name))?;
+		let marker = marker.or_else(|| {
+			properties
+				.and_then(|p| p.language.as_deref())
+				.map(InjectionLanguageMarker::Name)
+		})?;
 
 		let language = loader.language_for_marker(marker)?;
 		let scope = if properties.is_some_and(|p| p.combined) {
@@ -375,10 +375,10 @@ impl Syntax {
 		let mut injections: Vec<Injection> = Vec::with_capacity(layer_data.injections.len());
 		let mut old_injections = take(&mut layer_data.injections).into_iter().peekable();
 
-		let injection_query = injections_query.execute(&parse_tree.root_node(), source, loader);
+		let query_matches = injections_query.execute(&parse_tree.root_node(), source, loader);
 
 		let mut combined_injections: HashMap<InjectionScope, Layer> = HashMap::with_capacity(32);
-		for mat in injection_query {
+		for mat in query_matches {
 			let matched_node_range = mat.node.byte_range();
 			let mut insert_position = injections.len();
 			// if a parent node already has an injection ignore this injection
@@ -408,15 +408,16 @@ impl Syntax {
 			}
 
 			let language = mat.language;
-			let reused_injection = self.reuse_injection(language, matched_node_range.clone(), &mut old_injections);
+			let reused_injection = self.reuse_injection(language, &matched_node_range, &mut old_injections);
+			let reused_layer = reused_injection.as_ref().map(|injection| injection.layer);
 			let layer = match mat.scope {
 				Some(scope @ InjectionScope::Match { .. }) if mat.last_match => combined_injections
 					.remove(&scope)
-					.unwrap_or_else(|| self.init_injection(layer, mat.language, reused_injection.clone())),
+					.unwrap_or_else(|| self.init_injection(layer, mat.language, reused_layer)),
 				Some(scope) => *combined_injections
 					.entry(scope)
-					.or_insert_with(|| self.init_injection(layer, mat.language, reused_injection.clone())),
-				None => self.init_injection(layer, mat.language, reused_injection.clone()),
+					.or_insert_with(|| self.init_injection(layer, mat.language, reused_layer)),
+				None => self.init_injection(layer, mat.language, reused_layer),
 			};
 			let mut layer_data = self.layer_mut(layer);
 			if !layer_data.flags.touched {
@@ -553,14 +554,14 @@ impl Syntax {
 		self.layer_mut(layer).injections = injections;
 	}
 
-	fn init_injection(&mut self, parent: Layer, language: Language, reuse: Option<Injection>) -> Layer {
-		match reuse {
-			Some(old_injection) => {
-				let layer_data = self.layer_mut(old_injection.layer);
+	fn init_injection(&mut self, parent: Layer, language: Language, reuse_layer: Option<Layer>) -> Layer {
+		match reuse_layer {
+			Some(layer) => {
+				let layer_data = self.layer_mut(layer);
 				debug_assert_eq!(layer_data.parent, Some(parent));
 				layer_data.flags.reused = true;
 				layer_data.ranges.clear();
-				old_injection.layer
+				layer
 			}
 			None => {
 				let layer = self.layers.insert(LayerData {
@@ -579,7 +580,7 @@ impl Syntax {
 
 	// TODO: only reuse if same pattern is matched
 	fn reuse_injection(
-		&mut self, language: Language, new_range: Range, injections: &mut Peekable<impl Iterator<Item = Injection>>,
+		&mut self, language: Language, new_range: &Range, injections: &mut Peekable<impl Iterator<Item = Injection>>,
 	) -> Option<Injection> {
 		while let Some(skipped) = injections.next_if(|injection| injection.range.end <= new_range.start) {
 			// If the layer had an injection and now does not have the injection, consider the
@@ -630,8 +631,11 @@ fn intersect_ranges_impl(
 	let mut excluded_ranges = excluded_ranges.filter(|range| !range.is_empty()).peekable();
 	let mut parent_ranges = parent_ranges.peekable();
 	loop {
-		let parent_range = parent_ranges.peek().unwrap().clone();
-		if let Some(excluded_range) = excluded_ranges.next_if(|range| range.start <= parent_range.end) {
+		let Some(parent_range) = parent_ranges.peek() else {
+			return;
+		};
+		let parent_end = parent_range.end;
+		if let Some(excluded_range) = excluded_ranges.next_if(|range| range.start <= parent_end) {
 			if excluded_range.start >= range.end {
 				break;
 			}
@@ -641,11 +645,11 @@ fn intersect_ranges_impl(
 			start = excluded_range.end;
 		} else {
 			parent_ranges.next();
-			if parent_range.end >= range.end {
+			if parent_end >= range.end {
 				break;
 			}
-			if start != parent_range.end {
-				push_range(start..parent_range.end)
+			if start != parent_end {
+				push_range(start..parent_end)
 			}
 			let Some(next_parent_range) = parent_ranges.peek() else {
 				return;

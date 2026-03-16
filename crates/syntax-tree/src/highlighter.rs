@@ -226,7 +226,7 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 			active_config: query.loader().0.get_config(active_language),
 			next_query_event: None,
 			current_layer: query.current_layer(),
-			layer_states: Default::default(),
+			layer_states: HashMap::new(),
 			active_highlights: Vec::new(),
 			next_highlight_end: u32::MAX,
 			next_highlight_start: 0,
@@ -356,6 +356,7 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 		debug_assert!(!range.is_empty(), "QueryIter should not emit matches with empty ranges");
 
 		let config = self.active_config.expect("must have an active config to emit matches");
+		let locals = &self.query.syntax().layer(self.current_layer).locals;
 		if config
 			.highlight_query
 			.non_local_patterns
@@ -368,11 +369,7 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 				.source()
 				.byte_slice(range.start as usize..range.end as usize)
 				.into();
-			let is_local = self
-				.query
-				.syntax()
-				.layer(self.current_layer)
-				.locals
+			let is_local = locals
 				.lookup_reference(node.scope, &text)
 				.is_some_and(|def| range.start >= def.range.start);
 			if is_local {
@@ -388,11 +385,7 @@ impl<'a, 'tree: 'a, Loader: LanguageLoader> HighlightEvents<'a, 'tree, Loader> {
 				.source()
 				.byte_slice(range.start as usize..range.end as usize)
 				.into();
-			let Some(definition) = self
-				.query
-				.syntax()
-				.layer(self.current_layer)
-				.locals
+			let Some(definition) = locals
 				.lookup_reference(node.scope, &text)
 				.filter(|def| range.start >= def.range.end)
 			else {

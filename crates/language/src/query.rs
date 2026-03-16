@@ -4,8 +4,7 @@ use {glorp_syntax_tree::read_query as resolve_inherits, std::path::PathBuf};
 /// `; inherits` directives recursively.
 #[cfg(feature = "default-runtime-paths")]
 pub fn read_query(lang: &str, filename: &str) -> String {
-	let roots = crate::runtime_paths::query_search_paths();
-	read_query_from_paths(lang, filename, &roots)
+	read_query_from_paths(lang, filename, &crate::runtime_paths::query_search_paths())
 }
 
 /// Reads a query from the supplied query roots and resolves `; inherits`
@@ -15,13 +14,10 @@ pub fn read_query_from_paths(lang: &str, filename: &str, roots: &[PathBuf]) -> S
 }
 
 fn read_query_text(roots: &[PathBuf], query_lang: &str, filename: &str) -> String {
-	for root in roots {
-		let path = root.join(query_lang).join(filename);
-		if let Ok(content) = std::fs::read_to_string(&path) {
-			return content;
-		}
-	}
-	String::new()
+	roots
+		.iter()
+		.find_map(|root| std::fs::read_to_string(root.join(query_lang).join(filename)).ok())
+		.unwrap_or_default()
 }
 
 #[cfg(test)]

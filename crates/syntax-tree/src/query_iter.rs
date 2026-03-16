@@ -151,12 +151,12 @@ where
 			std::ops::Bound::Unbounded => src.len_bytes() as u32,
 		};
 		let range = start..end;
-		let node = syntax.tree().root_node();
+		let root_range = syntax.tree().root_node().byte_range();
 		// create fake injection for query root
 		let injection = Injection {
-			range: node.byte_range(),
+			range: root_range.clone(),
 			layer: syntax.root,
-			matched_node_range: node.byte_range(),
+			matched_node_range: root_range,
 		};
 		let mut layer_manager = Box::new(QueryIterLayerManager {
 			range,

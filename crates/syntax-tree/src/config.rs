@@ -5,7 +5,7 @@ use {
 		injections_query::{InjectionLanguageMarker, InjectionsQuery},
 	},
 	regex::Regex,
-	std::{fmt::Write, sync::LazyLock},
+	std::sync::LazyLock,
 	tree_sitter::{Grammar, query},
 };
 
@@ -101,11 +101,13 @@ pub fn read_query(language: &str, mut read_query_text: impl FnMut(&str) -> Strin
 		// replaces all "; inherits <language>(,<language>)*" with the queries of the given language(s)
 		INHERITS_REGEX
 			.replace_all(&query, |captures: &regex::Captures| {
-				captures[1].split(',').fold(String::new(), |mut output, language| {
-					// `write!` to a String cannot fail.
-					write!(output, "\n{}\n", read_query_impl(language, &mut *read_query_text)).unwrap();
-					output
-				})
+				let mut output = String::new();
+				for language in captures[1].split(',') {
+					output.push('\n');
+					output.push_str(&read_query_impl(language, &mut *read_query_text));
+					output.push('\n');
+				}
+				output
 			})
 			.into_owned()
 	}
